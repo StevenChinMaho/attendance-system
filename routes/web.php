@@ -14,4 +14,8 @@ Route::middleware('auth')->group(function () {
 
     // 暫時的登入後首頁，後續會換成依角色顯示的即時狀態看板。
     Route::view('/dashboard', 'dashboard')->name('dashboard');
+
+    Route::middleware('role:admin')->group(function () {
+        Route::view('/admin/users', 'admin.users')->name('admin.users');
+    });
 });

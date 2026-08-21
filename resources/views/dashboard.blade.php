@@ -16,5 +16,11 @@
         <p class="mt-6 rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800">
             這是暫時的登入後首頁，之後會依角色（副班長／導師／管理者）換成即時點名看板。
         </p>
+
+        @role('admin')
+            <a href="{{ route('admin.users') }}" class="mt-4 inline-block text-sm text-slate-700 underline hover:text-slate-900">
+                帳號管理 →
+            </a>
+        @endrole
     </div>
 </x-layouts.app>
