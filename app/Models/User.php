@@ -5,6 +5,7 @@ namespace App\Models;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -46,5 +47,20 @@ class User extends Authenticatable
     public function teacher(): HasOne
     {
         return $this->hasOne(Teacher::class);
+    }
+
+    /**
+     * 還沒被連結成任何學生或老師身份的帳號——一個帳號同時間只能代表一個
+     * 真實身份，不能又是學生又是老師。$exceptTeacherId/$exceptStudentId
+     * 用於編輯畫面：讓「這筆記錄本來就連結的那個帳號」不會被自己排除掉。
+     */
+    public function scopeAvailableForLinking(
+        Builder $query,
+        ?int $exceptTeacherId = null,
+        ?int $exceptStudentId = null,
+    ): Builder {
+        return $query
+            ->whereDoesntHave('teacher', fn ($q) => $exceptTeacherId ? $q->whereKeyNot($exceptTeacherId) : $q)
+            ->whereDoesntHave('student', fn ($q) => $exceptStudentId ? $q->whereKeyNot($exceptStudentId) : $q);
     }
 }

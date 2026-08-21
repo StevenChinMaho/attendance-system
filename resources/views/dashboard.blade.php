@@ -18,9 +18,11 @@
         </p>
 
         @role('admin')
-            <a href="{{ route('admin.users') }}" class="mt-4 inline-block text-sm text-slate-700 underline hover:text-slate-900">
-                帳號管理 →
-            </a>
+            <div class="mt-4 flex gap-4 text-sm">
+                <a href="{{ route('admin.users') }}" class="text-slate-700 underline hover:text-slate-900">帳號管理 →</a>
+                <a href="{{ route('admin.teachers') }}" class="text-slate-700 underline hover:text-slate-900">教師管理 →</a>
+                <a href="{{ route('admin.classes') }}" class="text-slate-700 underline hover:text-slate-900">班級管理 →</a>
+            </div>
         @endrole
     </div>
 </x-layouts.app>

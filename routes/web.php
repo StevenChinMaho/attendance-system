@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\ShowClassStudentsController;
 use App\Http\Controllers\Auth\LoginController;
 use Illuminate\Support\Facades\Route;
 
@@ -17,5 +18,13 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('role:admin')->group(function () {
         Route::view('/admin/users', 'admin.users')->name('admin.users');
+        Route::view('/admin/teachers', 'admin.teachers')->name('admin.teachers');
+        Route::view('/admin/classes', 'admin.classes')->name('admin.classes');
+
+        // Route::view 不支援隱含路由模型綁定；closure route 又無法被
+        // route:cache 序列化，正式環境跑 optimize 會直接炸掉，所以用
+        // invokable controller 兩邊都顧到。
+        Route::get('/admin/classes/{schoolClass}/students', ShowClassStudentsController::class)
+            ->name('admin.classes.students');
     });
 });
