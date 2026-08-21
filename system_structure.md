@@ -12,6 +12,38 @@
 - 所有功能必須盡可能依照框架設計來實現，不能一味地只想實現功能而跳脫框架。
 - 所有路由除登入頁面外一律要求登入（`auth` middleware），未登入者一律只會看到登入介面，不會有任何資料外洩的路由或 API。
 
+# 開發流程規劃
+
+## Git 分支策略
+
+- `main` 永遠保持可部署狀態，不直接在上面開發。
+- 每個功能/階段開一個 feature branch（例如 `feature/school-classes-crud`），完成後合併回 `main`。個人專案不強制 PR review，但合併前必須跑過 `sail artisan test` 全綠、`sail artisan pint` 過。
+- Commit message 清楚描述「改了什麼」與「為什麼」，中英文皆可，不需要嚴格遵循 Conventional Commits 格式。
+
+## 開發階段順序
+
+依功能相依性排序，後面的階段建立在前面階段的資料表/權限之上：
+
+1. **帳號與登入基礎建設**（已完成）：`users` 表、spatie 角色權限套件、稽核套件、最小登入功能。
+2. **角色權限初始化**：建立 `admin`/`homeroom_teacher`/`student_rep` 角色與對應權限的 seeder；管理者後台建立/停用帳號的介面。
+3. **學年制度骨架**：`school_classes`、`students`、`teachers` 的 migration + model + 管理者 CRUD 介面（新增班級、編輯學生資訊、指派導師）。
+4. **點名核心功能**：`attendance_sessions`、`attendance_records`，含「一鍵全到」、股長/導師的點名操作介面。
+5. **處理情形與稽核**：`attendance_follow_ups`，串接 `spatie/laravel-activitylog` 記錄異動歷程。
+6. **即時狀態看板**：全校班級點名進度/缺席名單的 Dashboard（輪詢更新）。
+7. **正式環境部署**：最小化 Docker 映像、cloudflared 設定、上線前的資安複查。
+
+每個階段開始前，先確認 [system_structure.md](system_structure.md) 裡對應的資料庫設計與業務規則沒有遺漏的疑問，避免中途發現設計缺口要回頭改 schema。
+
+## 測試策略
+
+- 每個階段至少要有 Feature test 覆蓋核心流程（例如：點名送出後 `attendance_records` 數量正確、「一鍵全到」預設狀態正確）。
+- 權限邊界一定要有對應測試：例如副班長無法讀取/修改別班的點名資料、一般學生（無帳號）无法登入、停用帳號無法登入。這類測試對應到 Policy 的實作，是最容易因為疏忽而出安全漏洞的地方。
+- 合併回 `main` 前跑 `sail artisan test`，測試沒過不合併。
+
+## Code Review
+
+每個階段開發完、合併前，用 `/code-review` 自我審查一次目前分支的變更，特別留意權限認證相關的程式碼（呼應開發守則裡「權限認證必須謹慎檢查」的要求）。
+
 # 生產環境部署
 
 在遠端ubuntu server上也使用docker部署，使用docker cloudflared公開至網路，不可使用在生產環境使用laravel sail運行，須保證輕量、最小攻擊面等。
