@@ -6,6 +6,7 @@ use App\Livewire\Admin\UserManager;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -95,6 +96,52 @@ class UserManagerTest extends TestCase
             ->call('toggleActive', $target->id);
 
         $this->assertFalse($target->fresh()->is_active);
+    }
+
+    public function test_deactivating_a_user_deletes_their_existing_session_rows(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $target = User::factory()->create(['is_active' => true]);
+
+        // 模擬這個使用者原本有一個登入中的 session。
+        DB::table('sessions')->insert([
+            'id' => 'fake-session-id',
+            'user_id' => $target->id,
+            'ip_address' => '127.0.0.1',
+            'user_agent' => 'test',
+            'payload' => base64_encode('x'),
+            'last_activity' => now()->timestamp,
+        ]);
+
+        Livewire::actingAs($admin)
+            ->test(UserManager::class)
+            ->call('toggleActive', $target->id);
+
+        $this->assertDatabaseMissing('sessions', ['user_id' => $target->id]);
+    }
+
+    public function test_reactivating_a_user_does_not_touch_sessions(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $target = User::factory()->create(['is_active' => false]);
+
+        DB::table('sessions')->insert([
+            'id' => 'fake-session-id-2',
+            'user_id' => $target->id,
+            'ip_address' => '127.0.0.1',
+            'user_agent' => 'test',
+            'payload' => base64_encode('x'),
+            'last_activity' => now()->timestamp,
+        ]);
+
+        Livewire::actingAs($admin)
+            ->test(UserManager::class)
+            ->call('toggleActive', $target->id);
+
+        $this->assertTrue($target->fresh()->is_active);
+        $this->assertDatabaseHas('sessions', ['user_id' => $target->id]);
     }
 
     public function test_admin_cannot_deactivate_their_own_account(): void

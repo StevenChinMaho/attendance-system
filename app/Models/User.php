@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Traits\HasRoles;
 
 #[Fillable(['name', 'username', 'password', 'is_active'])]
@@ -62,5 +63,22 @@ class User extends Authenticatable
         return $query
             ->whereDoesntHave('teacher', fn ($q) => $exceptTeacherId ? $q->whereKeyNot($exceptTeacherId) : $q)
             ->whereDoesntHave('student', fn ($q) => $exceptStudentId ? $q->whereKeyNot($exceptStudentId) : $q);
+    }
+
+    /**
+     * 立刻讓這個帳號現有的登入 session 全部失效——縱深防禦用：即使
+     * EnsureAccountIsActive middleware 未來被改壞或漏掉，session 記錄
+     * 本身已經被刪除，一樣擋得住。
+     *
+     * 只有在 SESSION_DRIVER=database（目前的設定）時，這張表才是真正在
+     * 用的 session 儲存位置；如果之後改用 file/redis 等其他 driver，
+     * 這個操作會直接變成 0 筆受影響、安全地變成無作用，不會噴錯，但也
+     * 不會再提供這層縱深防禦，屆時要換成對應 driver 的失效方式。
+     */
+    public function invalidateSessions(): void
+    {
+        DB::table(config('session.table', 'sessions'))
+            ->where('user_id', $this->id)
+            ->delete();
     }
 }

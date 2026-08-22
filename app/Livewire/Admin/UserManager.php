@@ -57,6 +57,10 @@ class UserManager extends Component
         }
 
         $user->update(['is_active' => ! $user->is_active]);
+
+        if (! $user->is_active) {
+            $user->invalidateSessions();
+        }
     }
 
     protected function currentAdmin(): User
