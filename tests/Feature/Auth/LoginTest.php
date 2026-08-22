@@ -85,6 +85,39 @@ class LoginTest extends TestCase
         $this->assertGuest();
     }
 
+    public function test_the_login_page_is_never_cached_by_the_browser(): void
+    {
+        // 沒有這個 header，瀏覽器可能用 bfcache/上一頁 顯示出這個頁面已經
+        // 登入之前的舊版本，讓已登入的使用者看到自己的舊登入表單。Symfony
+        // 會重新排序/正規化這個 header 的內容，所以只檢查關鍵指令有沒有
+        // 出現，不比對完整字串。
+        $cacheControl = $this->get('/')->headers->get('Cache-Control');
+
+        $this->assertStringContainsString('no-store', $cacheControl);
+        $this->assertStringContainsString('no-cache', $cacheControl);
+    }
+
+    public function test_submitting_login_while_a_different_account_is_already_authenticated_switches_accounts(): void
+    {
+        // 重現情境：user1 已登入，瀏覽器透過「上一頁」或書籤顯示出登入頁
+        // 的過期快取，這時候在那個舊表單填了 user2 的帳密送出。因為
+        // POST /login 沒有掛 guest middleware，這個請求應該被正常處理成
+        // 「登出 user1、登入 user2」，而不是被 guest middleware 靜默攔截、
+        // 導回 user1 原本的頁面。
+        $user1 = User::factory()->create(['username' => 'user1', 'password' => bcrypt('password1')]);
+        $user2 = User::factory()->create(['username' => 'user2', 'password' => bcrypt('password2')]);
+
+        $this->actingAs($user1);
+        $this->assertAuthenticatedAs($user1);
+
+        $this->post('/login', [
+            'username' => 'user2',
+            'password' => 'password2',
+        ])->assertRedirect(route('dashboard'));
+
+        $this->assertAuthenticatedAs($user2);
+    }
+
     public function test_authenticated_user_can_logout(): void
     {
         $user = User::factory()->create();
