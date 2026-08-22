@@ -9,6 +9,7 @@ use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\User;
+use App\Support\AcademicPeriod;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -123,5 +124,41 @@ class StatusBoardTest extends TestCase
             ->assertSee('已點名')
             ->assertSee('缺席同學')
             ->assertDontSee('出席同學'); // 出席不算例外，不需要在「需留意學生」裡列出
+    }
+
+    public function test_classes_outside_the_selected_academic_period_are_not_shown(): void
+    {
+        // 看板只顯示 nav bar 目前選取的學年度／學期，其他學年度已經凍結
+        // 的班級不該混在「目前」的總覽裡——見 App\Support\AcademicPeriod。
+        $otherYearClass = SchoolClass::factory()->create(['academic_year' => 112]);
+        $currentClass = SchoolClass::factory()->create();
+
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        Livewire::actingAs($admin)
+            ->test(StatusBoard::class)
+            ->assertSee($currentClass->label())
+            ->assertDontSee($otherYearClass->label());
+    }
+
+    public function test_switching_the_academic_period_immediately_refreshes_the_board(): void
+    {
+        $currentClass = SchoolClass::factory()->create(['grade' => 1, 'class_number' => '1']);
+        $otherClass = SchoolClass::factory()->create(['academic_year' => 112, 'semester' => 1, 'grade' => 1, 'class_number' => '2']);
+
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $component = Livewire::actingAs($admin)->test(StatusBoard::class);
+        $component->assertSee($currentClass->label())->assertDontSee($otherClass->label());
+
+        // 模擬 nav bar 的 AcademicPeriodSwitcher 已經把新選擇寫進 session，
+        // 並廣播 academic-period-changed 事件——看板不需要使用者自己手動
+        // 重新整理頁面就要立刻反映新篩選。
+        AcademicPeriod::setSelected(112, 1);
+        $component->dispatch('academic-period-changed');
+
+        $component->assertSee($otherClass->label())->assertDontSee($currentClass->label());
     }
 }

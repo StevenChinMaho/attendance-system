@@ -1,6 +1,11 @@
 <div wire:poll.15s class="mx-auto max-w-5xl px-4 py-10">
     <div class="flex flex-wrap items-center justify-between gap-4">
-        <h1 class="text-lg font-semibold text-slate-900">即時點名看板</h1>
+        <div>
+            <h1 class="text-lg font-semibold text-slate-900">即時點名看板</h1>
+            <p class="mt-1 text-xs text-slate-500">
+                顯示範圍：{{ \App\Support\AcademicPeriod::label($selectedAcademicYear, $selectedSemester) }}
+            </p>
+        </div>
 
         <div class="flex flex-wrap items-end gap-4">
             <div>

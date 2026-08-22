@@ -23,6 +23,6 @@ class AttendanceRecordPolicy
             return true;
         }
 
-        return $user->ownSchoolClass()?->id === $record->attendanceSession->school_class_id;
+        return $user->ownSchoolClasses()->contains('id', $record->attendanceSession->school_class_id);
     }
 }

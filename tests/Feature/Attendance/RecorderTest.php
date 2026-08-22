@@ -134,10 +134,52 @@ class RecorderTest extends TestCase
             ->get('/attendance')
             ->assertRedirect(route('attendance.show', $currentClass));
 
-        // 導師換帶新班級後，舊班級的點名權限自然收回——那個班級的紀錄已經
-        // 隨學年凍結，不需要（也不應該）再被繼續編輯，管理者仍可用 admin
-        // 身份處理歷史資料的例外狀況。
-        $this->actingAs($teacherUser)->get("/attendance/{$oldClass->id}")->assertForbidden();
+        // 導師換帶新班級後，舊班級不會被自動收回存取權——過去帶過的班級
+        // 之後仍可能需要回頭補登或更正點名紀錄，見 User::ownSchoolClasses()
+        // 跟 SchoolClassPolicy。nav bar 換帶多班的帳號會顯示班級選單
+        // （見下面 test_nav_bar_shows_a_class_picker_...）讓使用者自己選。
+        $this->actingAs($teacherUser)->get("/attendance/{$oldClass->id}")->assertOk();
+    }
+
+    public function test_teacher_with_concurrent_homeroom_classes_can_access_both(): void
+    {
+        // 一位導師理論上可能同時身兼不只一個班的導師（teachers.id 對
+        // school_classes.homeroom_teacher_id 是一對多），兩班都要能點名，
+        // 不能因為 ownSchoolClass() 只挑得出一筆就被擋掉另一班。
+        $teacherUser = User::factory()->create();
+        $teacherUser->assignRole('homeroom_teacher');
+        $teacher = Teacher::factory()->create(['user_id' => $teacherUser->id]);
+
+        $classA = SchoolClass::factory()->create(['homeroom_teacher_id' => $teacher->id]);
+        $classB = SchoolClass::factory()->create(['homeroom_teacher_id' => $teacher->id]);
+
+        $this->actingAs($teacherUser)->get("/attendance/{$classA->id}")->assertOk();
+        $this->actingAs($teacherUser)->get("/attendance/{$classB->id}")->assertOk();
+    }
+
+    public function test_nav_bar_shows_a_class_picker_when_the_account_has_multiple_classes(): void
+    {
+        $teacherUser = User::factory()->create();
+        $teacherUser->assignRole('homeroom_teacher');
+        $teacher = Teacher::factory()->create(['user_id' => $teacherUser->id]);
+
+        $classA = SchoolClass::factory()->create(['homeroom_teacher_id' => $teacher->id, 'grade' => 1, 'class_number' => '1']);
+        $classB = SchoolClass::factory()->create(['homeroom_teacher_id' => $teacher->id, 'grade' => 2, 'class_number' => '2']);
+
+        $response = $this->actingAs($teacherUser)->get('/dashboard');
+
+        $response->assertSee($classA->label());
+        $response->assertSee($classB->label());
+    }
+
+    public function test_nav_bar_shows_a_plain_link_when_the_account_has_only_one_class(): void
+    {
+        $class = SchoolClass::factory()->create();
+        $rep = $this->studentRepFor($class);
+
+        $this->actingAs($rep)
+            ->get('/dashboard')
+            ->assertSee(route('attendance.mine'), false);
     }
 
     public function test_mine_route_redirects_to_dashboard_when_no_class_is_linked(): void
@@ -159,20 +201,6 @@ class RecorderTest extends TestCase
 
         Livewire::actingAs($admin)
             ->test(Recorder::class, ['schoolClass' => $class])
-            ->assertSet("statuses.{$student->id}", AttendanceStatus::Present->value);
-    }
-
-    public function test_mark_all_present_resets_every_students_status(): void
-    {
-        $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create();
-        $admin = User::factory()->create();
-        $admin->assignRole('admin');
-
-        Livewire::actingAs($admin)
-            ->test(Recorder::class, ['schoolClass' => $class])
-            ->set("statuses.{$student->id}", AttendanceStatus::Absent->value)
-            ->call('markAllPresent')
             ->assertSet("statuses.{$student->id}", AttendanceStatus::Present->value);
     }
 

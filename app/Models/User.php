@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Traits\HasRoles;
 
@@ -66,23 +67,47 @@ class User extends Authenticatable
     }
 
     /**
-     * 這個帳號自己所屬的班級：副班長是自己學生資料所在的班級，導師是
-     * 自己擔任導師的班級，其他角色（例如 admin）沒有固定班級。
+     * 這個帳號名下所有的班級：副班長最多一筆（一個帳號只能連結一個
+     * 學生身份），導師則可能同時或跨學年帶過不只一個班（`teachers.id`
+     * 對 `school_classes.homeroom_teacher_id` 是一對多），其他角色
+     * （例如 admin）沒有固定班級、回傳空集合。
      *
-     * 「使用者屬於哪個班級」只在這裡實作一次——GoToMyClassAttendanceController
-     * 用它決定要導去哪一頁，SchoolClassPolicy 用它判斷能不能操作特定
-     * 班級，兩處各自重寫一份同樣的邏輯容易兩邊不同步，收斂成一個方法
-     * 之後改動（例如未來允許一人帶多班）只需要改這裡。
+     * 「使用者名下有哪些班級」只在這裡實作一次——nav bar 的班級選單、
+     * GoToMyClassAttendanceController、SchoolClassPolicy/AttendanceRecordPolicy
+     * 的範圍檢查都用它，避免各處各自重寫一份同樣的邏輯又兩邊不同步。
+     *
+     * @return Collection<int, SchoolClass>
+     */
+    public function ownSchoolClasses(): Collection
+    {
+        if ($this->student) {
+            return $this->student->schoolClass ? collect([$this->student->schoolClass]) : collect();
+        }
+
+        if ($this->teacher) {
+            // 一位導師可能帶過好幾個學年度的班級（每學年的班級都是獨立
+            // 紀錄，見 system_structure.md 學年制度），排序把「現在」帶的
+            // 班放最前面，給只需要單一班級的呼叫點（ownSchoolClass()）用。
+            return $this->teacher->homeroomClasses()
+                ->orderByDesc('academic_year')
+                ->orderByDesc('semester')
+                ->orderByClassNumber()
+                ->get();
+        }
+
+        return collect();
+    }
+
+    /**
+     * 這個帳號「目前最新」所屬的單一班級，給只在乎「導去哪一頁」而不是
+     * 「列出所有班級讓使用者選」的呼叫點用（例如 GoToMyClassAttendanceController
+     * 的預設導向）。真正決定「這個帳號能不能操作某個班」的地方（Policy）
+     * 不該用這個方法比對相等——導師可能同時或跨學年帶過不只一個班，
+     * 應該用 ownSchoolClasses() 檢查「這個班在不在名下清單裡」。
      */
     public function ownSchoolClass(): ?SchoolClass
     {
-        // 一位導師可能帶過好幾個學年度的班級（每學年的班級都是獨立紀錄，
-        // 見 system_structure.md 學年制度），不排序的話 first() 撿到的是
-        // 資料庫預設順序（通常等於最舊的那筆），要明確取最新學年/學期。
-        return $this->student?->schoolClass ?? $this->teacher?->homeroomClasses()
-            ->orderByDesc('academic_year')
-            ->orderByDesc('semester')
-            ->first();
+        return $this->ownSchoolClasses()->first();
     }
 
     /**

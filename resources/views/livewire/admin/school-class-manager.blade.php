@@ -1,6 +1,11 @@
 <div class="mx-auto max-w-4xl px-4 py-10">
     <div class="flex items-center justify-between">
-        <h1 class="text-lg font-semibold text-slate-900">班級管理</h1>
+        <div>
+            <h1 class="text-lg font-semibold text-slate-900">班級管理</h1>
+            <p class="mt-1 text-xs text-slate-500">
+                顯示範圍：{{ \App\Support\AcademicPeriod::label($selectedAcademicYear, $selectedSemester) }}，要看別的學年度請用上方導覽列的切換選單。
+            </p>
+        </div>
         <button
             type="button"
             wire:click="$toggle('showCreateForm')"
@@ -20,18 +25,15 @@
         <form wire:submit="createClass" class="mt-6 grid grid-cols-2 gap-4 rounded-lg border border-slate-200 bg-white p-6">
             <div>
                 <label class="block text-sm font-medium text-slate-700">學年度（民國年）</label>
-                <input type="number" wire:model="academicYear" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                @error('academicYear') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                {{-- 新增班級的學年度／學期鎖定為目前選取的範圍，不接受自由
+                     輸入（沒有 wire:model，client 端也就沒有管道竄改）——
+                     要建到別的學年度，先用上方導覽列切換再新增。 --}}
+                <input type="text" value="{{ $selectedAcademicYear }}" disabled class="mt-1 block w-full rounded-md border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-500">
             </div>
 
             <div>
                 <label class="block text-sm font-medium text-slate-700">學期</label>
-                <select wire:model="semester" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                    <option value="">請選擇</option>
-                    <option value="1">上學期</option>
-                    <option value="2">下學期</option>
-                </select>
-                @error('semester') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                <input type="text" value="{{ \App\Support\AcademicPeriod::semesterOptions()[$selectedSemester] ?? '' }}" disabled class="mt-1 block w-full rounded-md border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-500">
             </div>
 
             <div>

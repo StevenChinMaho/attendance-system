@@ -15,6 +15,10 @@ class SchoolClassPolicy
 {
     /**
      * 這個帳號可不可以幫這個班級點名（新增或修改 attendance_sessions）。
+     * 副班長/導師可能同時或跨學年帶過不只一個班（見
+     * User::ownSchoolClasses()），只要目標班級在名下清單裡就放行，不限定
+     * 只能是「目前最新」那一筆——過去帶過的班級之後仍可能需要回頭補登
+     * 或更正點名紀錄。
      */
     public function recordAttendance(User $user, SchoolClass $schoolClass): bool
     {
@@ -26,6 +30,6 @@ class SchoolClassPolicy
             return true;
         }
 
-        return $user->ownSchoolClass()?->id === $schoolClass->id;
+        return $user->ownSchoolClasses()->contains('id', $schoolClass->id);
     }
 }

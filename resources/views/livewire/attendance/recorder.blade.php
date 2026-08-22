@@ -30,17 +30,7 @@
         </span>
     </div>
 
-    <div class="mt-4 flex justify-end">
-        <button
-            type="button"
-            wire:click="markAllPresent"
-            class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-            一鍵全到
-        </button>
-    </div>
-
-    <table class="mt-2 w-full overflow-hidden rounded-lg border border-slate-200 bg-white text-sm">
+    <table class="mt-4 w-full overflow-hidden rounded-lg border border-slate-200 bg-white text-sm">
         <thead class="bg-slate-50 text-left text-xs uppercase text-slate-500">
             <tr>
                 <th class="px-4 py-2">座號</th>

@@ -4,6 +4,7 @@ namespace App\Livewire\Attendance;
 
 use App\Enums\AttendanceStatus;
 use App\Livewire\Concerns\AttendancePeriods;
+use App\Livewire\Concerns\ScopesToSelectedAcademicPeriod;
 use App\Models\SchoolClass;
 use Illuminate\Support\Collection;
 use Livewire\Component;
@@ -13,9 +14,16 @@ use Livewire\Component;
  * attendance.dashboard.view）——不是給副班長看的，副班長只需要透過
  * Recorder 管好自己班。畫面用 wire:poll 輪詢更新，對應
  * system_structure.md「看板採輪詢方式更新即可，不需要 WebSocket」。
+ *
+ * 只顯示 nav bar 目前選取的學年度／學期（見
+ * App\Livewire\Concerns\ScopesToSelectedAcademicPeriod）——這是全站
+ * 最高層級的篩選，看板不例外，不然舊學年度已經凍結的班級會一直混在
+ * 「目前」的總覽裡。
  */
 class StatusBoard extends Component
 {
+    use ScopesToSelectedAcademicPeriod;
+
     public string $date = '';
 
     public string $period = '';
@@ -42,12 +50,14 @@ class StatusBoard extends Component
     public function render()
     {
         $classes = SchoolClass::query()
+            ->where('academic_year', $this->selectedAcademicYear)
+            ->where('semester', $this->selectedSemester)
             ->with(['students', 'attendanceSessions' => function ($query) {
                 $query->where('date', $this->date)
                     ->where('period', $this->period)
                     ->with('records');
             }])
-            ->orderByDesc('academic_year')->orderBy('grade')
+            ->orderBy('grade')
             ->orderByClassNumber()
             ->get();
 

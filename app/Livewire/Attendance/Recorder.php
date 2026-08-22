@@ -81,16 +81,6 @@ class Recorder extends Component
         $this->loadSession();
     }
 
-    /**
-     * 「一鍵全到」：把目前畫面上每個學生都設成出席。這不會直接寫資料庫，
-     * 使用者還是要按「送出點名單」才算完成，跟系統設計要點裡「未確實
-     * 送出」的防呆精神一致。
-     */
-    public function markAllPresent(): void
-    {
-        $this->statuses = array_fill_keys(array_keys($this->statuses), AttendanceStatus::Present->value);
-    }
-
     public function submit(): void
     {
         $this->validate([
