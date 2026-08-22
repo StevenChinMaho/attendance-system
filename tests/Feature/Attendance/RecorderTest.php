@@ -13,6 +13,7 @@ use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Spatie\Activitylog\Models\Activity;
 use Tests\TestCase;
 
 class RecorderTest extends TestCase
@@ -291,5 +292,109 @@ class RecorderTest extends TestCase
             ->call('submit');
 
         $this->assertDatabaseMissing('attendance_records', ['student_id' => $foreignStudent->id]);
+    }
+
+    public function test_marking_a_student_absent_is_recorded_in_the_activity_log(): void
+    {
+        $class = SchoolClass::factory()->create();
+        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        Livewire::actingAs($admin)
+            ->test(Recorder::class, ['schoolClass' => $class])
+            ->set("statuses.{$student->id}", AttendanceStatus::Absent->value)
+            ->call('submit');
+
+        $this->assertTrue(
+            Activity::where('log_name', 'attendance_record')
+                ->where('causer_id', $admin->id)
+                ->where('properties->student_id', $student->id)
+                ->where('properties->new', AttendanceStatus::Absent->value)
+                ->exists()
+        );
+    }
+
+    public function test_a_routine_all_present_first_submission_is_not_logged_as_activity(): void
+    {
+        // 全班第一次點名、大家都出席是例行狀態，不是需要留意的例外，
+        // 不應該每天都在稽核紀錄裡留下 30 筆「出席」的雜訊。
+        $class = SchoolClass::factory()->create();
+        Student::factory()->for($class, 'schoolClass')->count(3)->create();
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        Livewire::actingAs($admin)
+            ->test(Recorder::class, ['schoolClass' => $class])
+            ->call('submit');
+
+        $this->assertSame(0, Activity::where('log_name', 'attendance_record')->count());
+    }
+
+    public function test_correcting_an_already_recorded_status_is_logged_with_old_and_new_values(): void
+    {
+        $class = SchoolClass::factory()->create();
+        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $component = Livewire::actingAs($admin)->test(Recorder::class, ['schoolClass' => $class]);
+        $component->set("statuses.{$student->id}", AttendanceStatus::Absent->value)->call('submit');
+        $component->set("statuses.{$student->id}", AttendanceStatus::Present->value)->call('submit');
+
+        $this->assertTrue(
+            Activity::where('log_name', 'attendance_record')
+                ->where('properties->old', AttendanceStatus::Absent->value)
+                ->where('properties->new', AttendanceStatus::Present->value)
+                ->exists()
+        );
+    }
+
+    public function test_follow_up_section_only_shows_for_non_present_students_to_authorized_roles(): void
+    {
+        $class = SchoolClass::factory()->create();
+        $present = Student::factory()->for($class, 'schoolClass')->create(['name' => '出席同學']);
+        $absent = Student::factory()->for($class, 'schoolClass')->create(['name' => '缺席同學']);
+
+        $teacherUser = User::factory()->create();
+        $teacherUser->assignRole('homeroom_teacher');
+        $teacher = Teacher::factory()->create(['user_id' => $teacherUser->id]);
+        $class->update(['homeroom_teacher_id' => $teacher->id]);
+
+        Livewire::actingAs($teacherUser)
+            ->test(Recorder::class, ['schoolClass' => $class])
+            ->set("statuses.{$absent->id}", AttendanceStatus::Absent->value)
+            ->call('submit')
+            ->assertSeeHtml('addFollowUp');
+
+        // 副班長點名得了但沒有處理情形的權限，畫面上不該出現這個區塊。
+        $rep = $this->studentRepFor($class);
+        Livewire::actingAs($rep)
+            ->test(Recorder::class, ['schoolClass' => $class])
+            ->assertDontSeeHtml('addFollowUp');
+    }
+
+    public function test_follow_up_history_stays_visible_after_status_is_corrected_back_to_present(): void
+    {
+        // 導師先把學生記成缺席、留了處理情形，後來查證其實有到、把狀態
+        // 改回出席——之前留的紀錄不該因此從畫面上完全消失不見。
+        $class = SchoolClass::factory()->create();
+        $student = Student::factory()->for($class, 'schoolClass')->create();
+
+        $teacherUser = User::factory()->create();
+        $teacherUser->assignRole('homeroom_teacher');
+        $teacher = Teacher::factory()->create(['user_id' => $teacherUser->id]);
+        $class->update(['homeroom_teacher_id' => $teacher->id]);
+
+        $component = Livewire::actingAs($teacherUser)->test(Recorder::class, ['schoolClass' => $class]);
+        $component->set("statuses.{$student->id}", AttendanceStatus::Absent->value)->call('submit');
+
+        $record = AttendanceRecord::where('student_id', $student->id)->first();
+        $record->followUps()->create(['created_by' => $teacherUser->id, 'content' => '查證後其實有到']);
+
+        $component->set("statuses.{$student->id}", AttendanceStatus::Present->value)
+            ->call('submit')
+            ->assertSeeHtml('addFollowUp')
+            ->assertSee('查證後其實有到');
     }
 }

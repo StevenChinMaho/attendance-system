@@ -26,7 +26,7 @@
         </div>
 
         <span class="text-xs text-slate-500">
-            {{ $hasExistingSession ? '本時段已點過名，可以修改後重新送出。' : '本時段尚未點名。' }}
+            {{ $currentSessionId ? '本時段已點過名，可以修改後重新送出。' : '本時段尚未點名。' }}
         </span>
     </div>
 
@@ -46,19 +46,40 @@
                 <th class="px-4 py-2">座號</th>
                 <th class="px-4 py-2">姓名</th>
                 <th class="px-4 py-2">出席狀況</th>
+                <th class="px-4 py-2">處理情形</th>
             </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
             @foreach ($students as $student)
+                @php $record = $sessionRecords->get($student->id); @endphp
                 <tr>
-                    <td class="px-4 py-2">{{ $student->seat_number }}</td>
-                    <td class="px-4 py-2">{{ $student->name }}</td>
-                    <td class="px-4 py-2">
+                    <td class="px-4 py-2 align-top">{{ $student->seat_number }}</td>
+                    <td class="px-4 py-2 align-top">{{ $student->name }}</td>
+                    <td class="px-4 py-2 align-top">
                         <select wire:model="statuses.{{ $student->id }}" class="rounded-md border border-slate-300 px-2 py-1 text-sm">
                             @foreach ($statusOptions as $option)
                                 <option value="{{ $option->value }}">{{ $option->label() }}</option>
                             @endforeach
                         </select>
+                    </td>
+                    <td class="px-4 py-2 align-top">
+                        {{-- 現在狀態是出席也要保留：狀態可能是被導師事後修正回來的
+                             （例如「查證後其實有到」），但之前留的處理情形歷史
+                             不該因此從畫面上消失，只是不再是「例外狀態」而已。 --}}
+                        @if ($record && ($record->status !== \App\Enums\AttendanceStatus::Present || $record->followUps->isNotEmpty()))
+                            @can('manageFollowUp', $record)
+                                {{-- key 帶狀態值，不能只用 record id：Livewire 巢狀元件是用
+                                     key 判斷「這是不是同一個已掛載的子元件」，key 不變的話
+                                     父層重新渲染不會強制子元件重新掛載讀取新資料——如果只用
+                                     id，導師把狀態從缺席改回出席重新送出後，這個區塊雖然
+                                     條件仍成立，畫面卻不會反映最新狀態，帶上狀態值讓每次
+                                     狀態改變都視為新元件重新掛載。 --}}
+                                <livewire:attendance.follow-up-manager
+                                    :record="$record"
+                                    :key="'follow-up-'.$record->id.'-'.$record->status->value"
+                                />
+                            @endcan
+                        @endif
                     </td>
                 </tr>
             @endforeach

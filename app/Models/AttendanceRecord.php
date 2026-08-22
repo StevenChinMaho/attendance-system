@@ -3,13 +3,17 @@
 namespace App\Models;
 
 use App\Enums\AttendanceStatus;
+use App\Policies\AttendanceRecordPolicy;
 use Database\Factories\AttendanceRecordFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\UsePolicy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable(['attendance_session_id', 'student_id', 'status', 'updated_by'])]
+#[UsePolicy(AttendanceRecordPolicy::class)]
 class AttendanceRecord extends Model
 {
     /** @use HasFactory<AttendanceRecordFactory> */
@@ -38,5 +42,10 @@ class AttendanceRecord extends Model
     public function updatedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    public function followUps(): HasMany
+    {
+        return $this->hasMany(AttendanceFollowUp::class)->latest();
     }
 }
