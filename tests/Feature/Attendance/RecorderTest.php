@@ -274,14 +274,14 @@ class RecorderTest extends TestCase
 
         Livewire::actingAs($admin)
             ->test(Recorder::class, ['schoolClass' => $class])
-            ->set("statuses.{$student->id}", AttendanceStatus::SickLeave->value)
+            ->set("statuses.{$student->id}", AttendanceStatus::EarlyLeave->value)
             ->call('submit');
 
         // 重新進入同一個班級/日期/時段的點名頁，應該要看到剛剛存的狀態，
         // 而不是又預設回「全部出席」。
         Livewire::actingAs($admin)
             ->test(Recorder::class, ['schoolClass' => $class])
-            ->assertSet("statuses.{$student->id}", AttendanceStatus::SickLeave->value);
+            ->assertSet("statuses.{$student->id}", AttendanceStatus::EarlyLeave->value);
     }
 
     public function test_switching_period_loads_a_different_sessions_statuses(): void

@@ -11,21 +11,17 @@ namespace App\Enums;
 enum AttendanceStatus: string
 {
     case Present = 'PRESENT';
-    case Late = 'LATE';
-    case SickLeave = 'SICK_LEAVE';
-    case PersonalLeave = 'PERSONAL_LEAVE';
-    case OfficialLeave = 'OFFICIAL_LEAVE';
     case Absent = 'ABSENT';
+    case Late = 'LATE';
+    case EarlyLeave = 'EARLY_LEAVE';
 
     public function label(): string
     {
         return match ($this) {
             self::Present => '出席',
-            self::Late => '遲到',
-            self::SickLeave => '病假',
-            self::PersonalLeave => '事假',
-            self::OfficialLeave => '公假',
             self::Absent => '缺席',
+            self::Late => '遲到',
+            self::EarlyLeave => '早退',
         };
     }
 }
