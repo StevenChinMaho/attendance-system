@@ -205,6 +205,22 @@ class Recorder extends Component
     }
 
     /**
+     * 這個班級在目前選取的日期，哪些時段已經點過名了——用來讓畫面上的
+     * 早/中/下午按鈕除了「目前選的是哪一個」以外，還能一眼看出「哪些
+     * 時段已經完成點名」，不用切過去才知道。查詢範圍是「這一天」而不是
+     * 「這一個時段」，一次撈三個時段的狀態，不用每個按鈕各自查一次。
+     *
+     * @return list<string>
+     */
+    protected function submittedPeriods(): array
+    {
+        return $this->schoolClass->attendanceSessions()
+            ->where('date', $this->date)
+            ->pluck('period')
+            ->all();
+    }
+
+    /**
      * 目前這個時段各學生對應的 AttendanceRecord，鍵是 student_id——
      * 「處理情形」元件需要真正的 record id 才能掛上去，$statuses 裡
      * 存的只是還沒送出的即時值，不能拿來用。
@@ -231,6 +247,7 @@ class Recorder extends Component
             'students' => $this->students(),
             'statusOptions' => AttendanceStatus::cases(),
             'sessionRecords' => $this->currentSessionRecords(),
+            'submittedPeriods' => $this->submittedPeriods(),
         ]);
     }
 }

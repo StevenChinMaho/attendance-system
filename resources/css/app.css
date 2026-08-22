@@ -1,5 +1,15 @@
 @import 'tailwindcss';
 
+/*
+ * class 驅動的深色模式（Tailwind v4 預設只認 prefers-color-scheme）：
+ * <html> 有 .dark 這個 class 時，dark: 開頭的 utility 才生效。切換
+ * 的邏輯（讀寫 localStorage、套用/移除 .dark）在
+ * resources/views/components/layouts/app.blade.php 的行內 script（避免
+ * 閃爍）跟 resources/views/components/theme-toggle.blade.php（nav bar
+ * 上的切換按鈕，用 Alpine——Livewire 已內建，不需要另外安裝）。
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 @source '../**/*.blade.php';
@@ -8,4 +18,167 @@
 @theme {
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+/*
+ * Tailwind v4 只讓 @apply 引用「真正的 utility」，我們自訂的
+ * .btn-primary 這類複合類別不能直接 @apply btn（btn 只是一個普通
+ * class，不是 utility）——用 @utility 把 btn/badge 這兩個共用底座
+ * 註冊成真正的 utility，下面 @layer components 裡的變化款才能
+ * @apply btn/@apply badge 疊加專屬的顏色。
+ */
+@utility btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    border-radius: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: 500;
+    transition-property: color, background-color, border-color;
+    transition-duration: 150ms;
+}
+
+@utility badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 500;
+}
+
+/*
+ * 共用元件樣式，集中定義在這裡而不是每個 Blade 檔案各自重複一長串
+ * utility class——原因跟 CLAUDE.md「Cross-cutting query/authorization
+ * patterns live in small Concerns traits」是同一個道理：按鈕、表格、
+ * 輸入框的視覺規則（含深色模式）只在一個地方維護，18 個 Blade 檔案
+ * 之後如果要統一調整風格，不用逐一改過去。
+ */
+@layer base {
+    body {
+        @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100;
+    }
+}
+
+@layer components {
+    /* 卡片／容器 */
+    .surface {
+        @apply rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900;
+    }
+
+    .page-title {
+        @apply text-lg font-semibold text-slate-900 dark:text-slate-50;
+    }
+
+    .page-subtitle {
+        @apply text-xs text-slate-500 dark:text-slate-400;
+    }
+
+    /* 按鈕 */
+    .btn-xs {
+        @apply px-2 py-1 text-xs;
+    }
+
+    .btn-primary {
+        @apply btn bg-indigo-600 text-white hover:bg-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-400;
+    }
+
+    .btn-secondary {
+        @apply btn border border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-slate-500 dark:hover:bg-slate-700;
+    }
+
+    .btn-ghost {
+        @apply btn text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white;
+    }
+
+    .btn-danger-ghost {
+        @apply btn text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10;
+    }
+
+    /* 表單 */
+    .field-label {
+        @apply block text-sm font-medium text-slate-700 dark:text-slate-300;
+    }
+
+    .field-input {
+        @apply mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100;
+    }
+
+    .field-error {
+        @apply mt-1 text-sm text-red-600 dark:text-red-400;
+    }
+
+    .field-hint {
+        @apply mt-1 text-xs text-slate-500 dark:text-slate-400;
+    }
+
+    /* 徽章／狀態標籤 */
+    .badge-success {
+        @apply badge bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400;
+    }
+
+    .badge-warning {
+        @apply badge bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400;
+    }
+
+    .badge-neutral {
+        @apply badge bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300;
+    }
+
+    .alert-success {
+        @apply rounded-md bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400;
+    }
+
+    .alert-error {
+        @apply rounded-md bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-400;
+    }
+
+    .alert-info {
+        @apply rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-400;
+    }
+
+    /*
+     * 表格：垂直格線刻意保留（見 system_structure.md 使用者反饋）——
+     * divide-x 讓同一列的每個儲存格之間都有一條直向分隔線，不是只有
+     * 外框跟列與列之間的橫線。
+     */
+    .table-wrap {
+        @apply overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800;
+    }
+
+    .data-table {
+        @apply w-full text-sm;
+    }
+
+    .data-table thead {
+        @apply bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-800/60 dark:text-slate-400;
+    }
+
+    .data-table thead tr,
+    .data-table tbody tr {
+        @apply divide-x divide-slate-200 dark:divide-slate-800;
+    }
+
+    .data-table tbody {
+        @apply divide-y divide-slate-100 dark:divide-slate-800;
+    }
+
+    .data-table th,
+    .data-table td {
+        @apply px-4 py-2;
+    }
+
+    .data-table tbody tr:hover {
+        @apply bg-slate-50 dark:bg-slate-800/40;
+    }
+
+    /* 一列裡並排的多個操作（管理學生／點名／編輯…），每個都是有邊框的
+       獨立按鈕，靠 gap 拉開距離，不再是黏在一起的純底線文字連結。 */
+    .action-group {
+        @apply flex flex-wrap justify-end gap-2;
+    }
 }

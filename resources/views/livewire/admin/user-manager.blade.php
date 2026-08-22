@@ -1,99 +1,95 @@
 <div class="mx-auto max-w-4xl px-4 py-10">
     <div class="flex items-center justify-between">
-        <h1 class="text-lg font-semibold text-slate-900">帳號管理</h1>
-        <button
-            type="button"
-            wire:click="$toggle('showCreateForm')"
-            class="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
-        >
+        <h1 class="page-title">帳號管理</h1>
+        <button type="button" wire:click="$toggle('showCreateForm')" class="btn-primary">
             {{ $showCreateForm ? '取消' : '新增帳號' }}
         </button>
     </div>
 
     @if (session('status'))
-        <div class="mt-4 rounded-md bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+        <div class="alert-success mt-4">
             {{ session('status') }}
         </div>
     @endif
 
     @if ($showCreateForm)
-        <form wire:submit="createUser" class="mt-6 space-y-4 rounded-lg border border-slate-200 bg-white p-6">
+        <form wire:submit="createUser" class="surface mt-6 space-y-4 p-6">
             <div>
-                <label class="block text-sm font-medium text-slate-700">姓名</label>
-                <input type="text" wire:model="name" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                @error('name') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                <label class="field-label">姓名</label>
+                <input type="text" wire:model="name" class="field-input">
+                @error('name') <p class="field-error">{{ $message }}</p> @enderror
             </div>
 
             <div>
-                <label class="block text-sm font-medium text-slate-700">帳號</label>
-                <input type="text" wire:model="username" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                @error('username') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                <label class="field-label">帳號</label>
+                <input type="text" wire:model="username" class="field-input">
+                @error('username') <p class="field-error">{{ $message }}</p> @enderror
             </div>
 
             <div>
-                <label class="block text-sm font-medium text-slate-700">初始密碼</label>
-                <input type="text" wire:model="password" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                <p class="mt-1 text-xs text-slate-500">請另外告知使用者這組密碼，系統不會寄送任何通知。</p>
-                @error('password') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                <label class="field-label">初始密碼</label>
+                <input type="text" wire:model="password" class="field-input">
+                <p class="field-hint">請另外告知使用者這組密碼，系統不會寄送任何通知。</p>
+                @error('password') <p class="field-error">{{ $message }}</p> @enderror
             </div>
 
             <div>
-                <label class="block text-sm font-medium text-slate-700">角色</label>
-                <select wire:model="role" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                <label class="field-label">角色</label>
+                <select wire:model="role" class="field-input">
                     <option value="">請選擇</option>
                     @foreach ($roles as $roleName)
                         <option value="{{ $roleName }}">{{ $roleName }}</option>
                     @endforeach
                 </select>
-                @error('role') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                @error('role') <p class="field-error">{{ $message }}</p> @enderror
             </div>
 
-            <button type="submit" class="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700">
+            <button type="submit" class="btn-primary">
                 建立帳號
             </button>
         </form>
     @endif
 
-    <table class="mt-6 w-full overflow-hidden rounded-lg border border-slate-200 bg-white text-sm">
-        <thead class="bg-slate-50 text-left text-xs uppercase text-slate-500">
-            <tr>
-                <th class="px-4 py-2">姓名</th>
-                <th class="px-4 py-2">帳號</th>
-                <th class="px-4 py-2">角色</th>
-                <th class="px-4 py-2">狀態</th>
-                <th class="px-4 py-2">最後登入</th>
-                <th class="px-4 py-2"></th>
-            </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
-            @foreach ($users as $user)
+    <div class="table-wrap mt-6">
+        <table class="data-table">
+            <thead>
                 <tr>
-                    <td class="px-4 py-2">{{ $user->name }}</td>
-                    <td class="px-4 py-2">{{ $user->username }}</td>
-                    <td class="px-4 py-2">{{ $user->roles->pluck('name')->join('、') ?: '—' }}</td>
-                    <td class="px-4 py-2">
-                        <span class="rounded-full px-2 py-0.5 text-xs {{ $user->is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500' }}">
-                            {{ $user->is_active ? '啟用中' : '已停用' }}
-                        </span>
-                    </td>
-                    <td class="px-4 py-2 text-slate-500">
-                        {{ $user->last_login_at?->format('Y-m-d H:i') ?? '尚未登入' }}
-                    </td>
-                    <td class="px-4 py-2 text-right">
-                        @unless ($user->is(auth()->user()))
-                            <button
-                                type="button"
-                                wire:click="toggleActive({{ $user->id }})"
-                                class="text-xs text-slate-600 underline hover:text-slate-900"
-                            >
-                                {{ $user->is_active ? '停用' : '啟用' }}
-                            </button>
-                        @endunless
-                    </td>
+                    <th>姓名</th>
+                    <th>帳號</th>
+                    <th>角色</th>
+                    <th>狀態</th>
+                    <th>最後登入</th>
+                    <th></th>
                 </tr>
-            @endforeach
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                @foreach ($users as $user)
+                    <tr>
+                        <td>{{ $user->name }}</td>
+                        <td>{{ $user->username }}</td>
+                        <td>{{ $user->roles->pluck('name')->join('、') ?: '—' }}</td>
+                        <td>
+                            <span class="{{ $user->is_active ? 'badge-success' : 'badge-neutral' }}">
+                                {{ $user->is_active ? '啟用中' : '已停用' }}
+                            </span>
+                        </td>
+                        <td class="text-slate-500 dark:text-slate-400">
+                            {{ $user->last_login_at?->format('Y-m-d H:i') ?? '尚未登入' }}
+                        </td>
+                        <td>
+                            @unless ($user->is(auth()->user()))
+                                <div class="action-group">
+                                    <button type="button" wire:click="toggleActive({{ $user->id }})" class="btn-secondary btn-xs">
+                                        {{ $user->is_active ? '停用' : '啟用' }}
+                                    </button>
+                                </div>
+                            @endunless
+                        </td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    </div>
 
     <div class="mt-4">
         {{ $users->links() }}

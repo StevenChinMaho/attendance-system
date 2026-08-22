@@ -1,56 +1,52 @@
 <div class="mx-auto max-w-4xl px-4 py-10">
-    <a href="{{ route('admin.classes') }}" class="text-xs text-slate-500 underline hover:text-slate-700">← 回班級列表</a>
+    <a href="{{ route('admin.classes') }}" class="text-xs text-slate-500 underline hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">← 回班級列表</a>
 
     <div class="mt-2 flex items-center justify-between">
-        <h1 class="text-lg font-semibold text-slate-900">{{ $schoolClass->shortLabel() }} 學生管理</h1>
-        <button
-            type="button"
-            wire:click="$toggle('showCreateForm')"
-            class="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
-        >
+        <h1 class="page-title">{{ $schoolClass->shortLabel() }} 學生管理</h1>
+        <button type="button" wire:click="$toggle('showCreateForm')" class="btn-primary">
             {{ $showCreateForm ? '取消' : '新增學生' }}
         </button>
     </div>
 
     @if (session('status'))
-        <div class="mt-4 rounded-md bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+        <div class="alert-success mt-4">
             {{ session('status') }}
         </div>
     @endif
 
     @if ($showCreateForm)
-        <form wire:submit="createStudent" class="mt-6 grid grid-cols-2 gap-4 rounded-lg border border-slate-200 bg-white p-6">
+        <form wire:submit="createStudent" class="surface mt-6 grid grid-cols-2 gap-4 p-6">
             <div>
-                <label class="block text-sm font-medium text-slate-700">學號</label>
-                <input type="text" wire:model="studentNumber" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                @error('studentNumber') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                <label class="field-label">學號</label>
+                <input type="text" wire:model="studentNumber" class="field-input">
+                @error('studentNumber') <p class="field-error">{{ $message }}</p> @enderror
             </div>
 
             <div>
-                <label class="block text-sm font-medium text-slate-700">座號</label>
-                <input type="text" wire:model="seatNumber" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                @error('seatNumber') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                <label class="field-label">座號</label>
+                <input type="text" wire:model="seatNumber" class="field-input">
+                @error('seatNumber') <p class="field-error">{{ $message }}</p> @enderror
             </div>
 
             <div>
-                <label class="block text-sm font-medium text-slate-700">姓名</label>
-                <input type="text" wire:model="name" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                @error('name') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                <label class="field-label">姓名</label>
+                <input type="text" wire:model="name" class="field-input">
+                @error('name') <p class="field-error">{{ $message }}</p> @enderror
             </div>
 
             <div>
-                <label class="block text-sm font-medium text-slate-700">性別</label>
-                <select wire:model="gender" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                <label class="field-label">性別</label>
+                <select wire:model="gender" class="field-input">
                     <option value="">請選擇</option>
                     <option value="男">男</option>
                     <option value="女">女</option>
                 </select>
-                @error('gender') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                @error('gender') <p class="field-error">{{ $message }}</p> @enderror
             </div>
 
             <div class="col-span-2">
-                <label class="block text-sm font-medium text-slate-700">連結登入帳號（選填，副班長才需要）</label>
-                <select wire:model="userId" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                <label class="field-label">連結登入帳號（選填，副班長才需要）</label>
+                <select wire:model="userId" class="field-input">
                     <option value="">不連結帳號</option>
                     @foreach ($availableUsers as $user)
                         <option value="{{ $user->id }}">{{ $user->name }}（{{ $user->username }}）</option>
@@ -59,63 +55,67 @@
             </div>
 
             <div class="col-span-2">
-                <button type="submit" class="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700">
+                <button type="submit" class="btn-primary">
                     建立
                 </button>
             </div>
         </form>
     @endif
 
-    <table class="mt-6 w-full overflow-hidden rounded-lg border border-slate-200 bg-white text-sm">
-        <thead class="bg-slate-50 text-left text-xs uppercase text-slate-500">
-            <tr>
-                <th class="px-4 py-2">座號</th>
-                <th class="px-4 py-2">學號</th>
-                <th class="px-4 py-2">姓名</th>
-                <th class="px-4 py-2">性別</th>
-                <th class="px-4 py-2">登入帳號</th>
-                <th class="px-4 py-2"></th>
-            </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
-            @foreach ($students as $student)
+    <div class="table-wrap mt-6">
+        <table class="data-table">
+            <thead>
                 <tr>
-                    @if ($editingStudentId === $student->id)
-                        <td class="px-4 py-2" colspan="6">
-                            <form wire:submit="updateStudent" class="flex flex-wrap items-center gap-2">
-                                <input type="text" wire:model="seatNumber" class="w-16 rounded-md border border-slate-300 px-2 py-1 text-sm">
-                                <input type="text" wire:model="studentNumber" class="w-24 rounded-md border border-slate-300 px-2 py-1 text-sm">
-                                <input type="text" wire:model="name" class="rounded-md border border-slate-300 px-2 py-1 text-sm">
-                                <select wire:model="gender" class="rounded-md border border-slate-300 px-2 py-1 text-sm">
-                                    <option value="男">男</option>
-                                    <option value="女">女</option>
-                                </select>
-                                <select wire:model="userId" class="rounded-md border border-slate-300 px-2 py-1 text-sm">
-                                    <option value="">不連結帳號</option>
-                                    @foreach ($availableUsers as $user)
-                                        <option value="{{ $user->id }}">{{ $user->name }}</option>
-                                    @endforeach
-                                </select>
-                                <button type="submit" class="text-xs text-emerald-700 underline">儲存</button>
-                                <button type="button" wire:click="cancelEdit" class="text-xs text-slate-500 underline">取消</button>
-                            </form>
-                            @error('studentNumber') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                            @error('seatNumber') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                        </td>
-                    @else
-                        <td class="px-4 py-2">{{ $student->seat_number }}</td>
-                        <td class="px-4 py-2">{{ $student->student_number }}</td>
-                        <td class="px-4 py-2">{{ $student->name }}</td>
-                        <td class="px-4 py-2">{{ $student->gender }}</td>
-                        <td class="px-4 py-2">{{ $student->user?->username ?? '—' }}</td>
-                        <td class="px-4 py-2 text-right">
-                            <button type="button" wire:click="startEdit({{ $student->id }})" class="text-xs text-slate-600 underline hover:text-slate-900">
-                                編輯
-                            </button>
-                        </td>
-                    @endif
+                    <th>座號</th>
+                    <th>學號</th>
+                    <th>姓名</th>
+                    <th>性別</th>
+                    <th>登入帳號</th>
+                    <th></th>
                 </tr>
-            @endforeach
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                @foreach ($students as $student)
+                    <tr>
+                        @if ($editingStudentId === $student->id)
+                            <td colspan="6">
+                                <form wire:submit="updateStudent" class="flex flex-wrap items-center gap-2">
+                                    <input type="text" wire:model="seatNumber" class="field-input mt-0 w-16 py-1">
+                                    <input type="text" wire:model="studentNumber" class="field-input mt-0 w-24 py-1">
+                                    <input type="text" wire:model="name" class="field-input mt-0 py-1">
+                                    <select wire:model="gender" class="field-input mt-0 py-1">
+                                        <option value="男">男</option>
+                                        <option value="女">女</option>
+                                    </select>
+                                    <select wire:model="userId" class="field-input mt-0 py-1">
+                                        <option value="">不連結帳號</option>
+                                        @foreach ($availableUsers as $user)
+                                            <option value="{{ $user->id }}">{{ $user->name }}</option>
+                                        @endforeach
+                                    </select>
+                                    <button type="submit" class="btn-primary btn-xs">儲存</button>
+                                    <button type="button" wire:click="cancelEdit" class="btn-secondary btn-xs">取消</button>
+                                </form>
+                                @error('studentNumber') <p class="field-error">{{ $message }}</p> @enderror
+                                @error('seatNumber') <p class="field-error">{{ $message }}</p> @enderror
+                            </td>
+                        @else
+                            <td>{{ $student->seat_number }}</td>
+                            <td>{{ $student->student_number }}</td>
+                            <td>{{ $student->name }}</td>
+                            <td>{{ $student->gender }}</td>
+                            <td>{{ $student->user?->username ?? '—' }}</td>
+                            <td>
+                                <div class="action-group">
+                                    <button type="button" wire:click="startEdit({{ $student->id }})" class="btn-secondary btn-xs">
+                                        編輯
+                                    </button>
+                                </div>
+                            </td>
+                        @endif
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    </div>
 </div>

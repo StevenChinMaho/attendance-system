@@ -1,13 +1,13 @@
 @php
     $linkClass = fn (bool $active) => $active
-        ? 'text-sm font-medium text-slate-900'
-        : 'text-sm text-slate-500 hover:text-slate-900';
+        ? 'text-sm font-medium text-slate-900 dark:text-white'
+        : 'text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white';
 @endphp
 
-<nav class="border-b border-slate-200 bg-white">
-    <div class="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
-        <div class="flex items-center gap-6">
-            <a href="{{ route('dashboard') }}" class="text-sm font-semibold text-slate-900">
+<nav class="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+    <div class="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <div class="flex flex-wrap items-center gap-6">
+            <a href="{{ route('dashboard') }}" class="text-sm font-semibold text-slate-900 dark:text-white">
                 國中點名系統
             </a>
 
@@ -25,7 +25,7 @@
                 @if ($ownClasses->count() > 1)
                     <select
                         onchange="if (this.value) { window.location.href = this.value; }"
-                        class="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700"
+                        class="field-input mt-0 w-auto py-1"
                     >
                         <option value="">點名（選擇班級）</option>
                         @foreach ($ownClasses as $ownClass)
@@ -54,7 +54,7 @@
             @endrole
         </div>
 
-        <div class="flex items-center gap-4">
+        <div class="flex items-center gap-3">
             {{-- 學年度／學期是全站最高層級的篩選（見 system_structure.md
                  學年制度），只有看得到「隨學年度變動的內容」（班級管理、
                  即時看板）的角色才需要切換它。 --}}
@@ -62,10 +62,12 @@
                 <livewire:academic-period-switcher />
             @endhasanyrole
 
-            <span class="text-sm text-slate-500">{{ auth()->user()->name }}</span>
+            <x-theme-toggle />
+
+            <span class="text-sm text-slate-500 dark:text-slate-400">{{ auth()->user()->name }}</span>
             <form method="POST" action="{{ route('logout') }}">
                 @csrf
-                <button type="submit" class="text-sm text-slate-500 underline hover:text-slate-900">
+                <button type="submit" class="text-sm text-slate-500 underline hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
                     登出
                 </button>
             </form>
