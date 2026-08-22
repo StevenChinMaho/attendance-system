@@ -115,6 +115,9 @@
                             <a href="{{ route('admin.classes.students', $class) }}" class="text-xs text-slate-600 underline hover:text-slate-900">
                                 管理學生
                             </a>
+                            <a href="{{ route('attendance.show', $class) }}" class="text-xs text-slate-600 underline hover:text-slate-900">
+                                點名
+                            </a>
                             <button type="button" wire:click="startEdit({{ $class->id }})" class="text-xs text-slate-600 underline hover:text-slate-900">
                                 編輯
                             </button>

@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Admin;
 
+use App\Livewire\Concerns\RequiresAdminRole;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\User;
@@ -11,6 +12,8 @@ use Livewire\Component;
 
 class StudentManager extends Component
 {
+    use RequiresAdminRole;
+
     public SchoolClass $schoolClass;
 
     public string $studentNumber = '';
@@ -117,7 +120,7 @@ class StudentManager extends Component
     public function render()
     {
         return view('livewire.admin.student-manager', [
-            'students' => $this->schoolClass->students()->with('user')->orderBy('seat_number')->get(),
+            'students' => $this->schoolClass->students()->with('user')->orderBySeatNumber()->get(),
             'availableUsers' => User::availableForLinking(exceptStudentId: $this->editingStudentId)
                 ->orderBy('name')
                 ->get(),

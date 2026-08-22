@@ -98,6 +98,28 @@ class UserManagerTest extends TestCase
         $this->assertFalse($target->fresh()->is_active);
     }
 
+    public function test_revoking_admin_role_mid_session_blocks_further_livewire_actions(): void
+    {
+        // routes/web.php 的 role:admin middleware 只在整頁載入那一刻檢查
+        // 一次，不會延續到 Livewire 元件之後每一次 wire:click 的互動請求
+        // ——這是 RequiresAdminRole trait 存在的原因，這裡驗證它真的擋得住。
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $component = Livewire::actingAs($admin)
+            ->test(UserManager::class)
+            ->set('name', '想搶著建立的帳號')
+            ->set('username', 'sneaky')
+            ->set('password', 'a-strong-password')
+            ->set('role', 'student_rep');
+
+        $admin->removeRole('admin');
+
+        $component->call('createUser')->assertForbidden();
+
+        $this->assertDatabaseMissing('users', ['username' => 'sneaky']);
+    }
+
     public function test_deactivating_a_user_deletes_their_existing_session_rows(): void
     {
         $admin = User::factory()->create();

@@ -2,14 +2,17 @@
 
 namespace App\Models;
 
+use App\Policies\SchoolClassPolicy;
 use Database\Factories\SchoolClassFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\UsePolicy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable(['academic_year', 'semester', 'grade', 'class_number', 'homeroom_teacher_id'])]
+#[UsePolicy(SchoolClassPolicy::class)]
 class SchoolClass extends Model
 {
     /** @use HasFactory<SchoolClassFactory> */
@@ -36,6 +39,11 @@ class SchoolClass extends Model
     public function students(): HasMany
     {
         return $this->hasMany(Student::class);
+    }
+
+    public function attendanceSessions(): HasMany
+    {
+        return $this->hasMany(AttendanceSession::class);
     }
 
     public function label(): string

@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Admin;
 
+use App\Livewire\Concerns\RequiresAdminRole;
 use App\Models\Teacher;
 use App\Models\User;
 use App\Rules\UserAccountIsUnlinked;
@@ -10,7 +11,7 @@ use Livewire\WithPagination;
 
 class TeacherManager extends Component
 {
-    use WithPagination;
+    use RequiresAdminRole, WithPagination;
 
     public string $teacherName = '';
 

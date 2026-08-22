@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Admin;
 
+use App\Livewire\Concerns\RequiresAdminRole;
 use App\Models\SchoolClass;
 use App\Models\Teacher;
 use Illuminate\Validation\Rule;
@@ -10,7 +11,7 @@ use Livewire\WithPagination;
 
 class SchoolClassManager extends Component
 {
-    use WithPagination;
+    use RequiresAdminRole, WithPagination;
 
     public string $academicYear = '';
 

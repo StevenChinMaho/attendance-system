@@ -66,6 +66,26 @@ class User extends Authenticatable
     }
 
     /**
+     * 這個帳號自己所屬的班級：副班長是自己學生資料所在的班級，導師是
+     * 自己擔任導師的班級，其他角色（例如 admin）沒有固定班級。
+     *
+     * 「使用者屬於哪個班級」只在這裡實作一次——GoToMyClassAttendanceController
+     * 用它決定要導去哪一頁，SchoolClassPolicy 用它判斷能不能操作特定
+     * 班級，兩處各自重寫一份同樣的邏輯容易兩邊不同步，收斂成一個方法
+     * 之後改動（例如未來允許一人帶多班）只需要改這裡。
+     */
+    public function ownSchoolClass(): ?SchoolClass
+    {
+        // 一位導師可能帶過好幾個學年度的班級（每學年的班級都是獨立紀錄，
+        // 見 system_structure.md 學年制度），不排序的話 first() 撿到的是
+        // 資料庫預設順序（通常等於最舊的那筆），要明確取最新學年/學期。
+        return $this->student?->schoolClass ?? $this->teacher?->homeroomClasses()
+            ->orderByDesc('academic_year')
+            ->orderByDesc('semester')
+            ->first();
+    }
+
+    /**
      * 立刻讓這個帳號現有的登入 session 全部失效——縱深防禦用：即使
      * EnsureAccountIsActive middleware 未來被改壞或漏掉，session 記錄
      * 本身已經被刪除，一樣擋得住。

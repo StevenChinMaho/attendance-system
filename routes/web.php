@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Admin\ShowClassStudentsController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\GoToMyClassAttendanceController;
+use App\Http\Controllers\ShowAttendanceController;
 use App\Http\Middleware\EnsureAccountIsActive;
 use Illuminate\Support\Facades\Route;
 
@@ -16,6 +18,14 @@ Route::middleware(['auth', EnsureAccountIsActive::class])->group(function () {
 
     // 暫時的登入後首頁，後續會換成依角色顯示的即時狀態看板。
     Route::view('/dashboard', 'dashboard')->name('dashboard');
+
+    Route::get('/attendance', GoToMyClassAttendanceController::class)->name('attendance.mine');
+
+    // can:recordAttendance,schoolClass 走 SchoolClassPolicy：admin 一定
+    // 可以，副班長/導師僅限自己的班級——見 app/Policies/SchoolClassPolicy.php。
+    Route::get('/attendance/{schoolClass}', ShowAttendanceController::class)
+        ->middleware('can:recordAttendance,schoolClass')
+        ->name('attendance.show');
 
     Route::middleware('role:admin')->group(function () {
         Route::view('/admin/users', 'admin.users')->name('admin.users');
