@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\ShowClassStudentsController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Middleware\EnsureAccountIsActive;
 use Illuminate\Support\Facades\Route;
 
 // 未登入者永遠只會看到登入頁面，不存在任何會外洩資訊的公開路由。
@@ -10,7 +11,7 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [LoginController::class, 'store']);
 });
 
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', EnsureAccountIsActive::class])->group(function () {
     Route::post('/logout', [LoginController::class, 'destroy'])->name('logout');
 
     // 暫時的登入後首頁，後續會換成依角色顯示的即時狀態看板。

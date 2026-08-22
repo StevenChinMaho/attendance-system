@@ -67,6 +67,24 @@ class LoginTest extends TestCase
         $this->assertGuest();
     }
 
+    public function test_deactivating_a_user_immediately_kicks_out_their_existing_session(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+
+        // 帳號還是啟用狀態時登入，模擬「使用者已經開著頁面」。
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk();
+
+        // 管理者事後停用這個帳號——session 本身完全沒有變動。
+        $user->update(['is_active' => false]);
+
+        // 同一個（已經登入的）session 再訪問任何受保護頁面，都應該被踢出，
+        // 而不是因為 session 還有效就放行。
+        $this->get('/dashboard')->assertRedirect(route('login'));
+        $this->assertGuest();
+    }
+
     public function test_authenticated_user_can_logout(): void
     {
         $user = User::factory()->create();
