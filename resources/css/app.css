@@ -158,8 +158,17 @@
         @apply w-full table-fixed text-sm;
     }
 
+    /*
+     * 標題列跟表身之間原本只靠 bg-slate-50 對白色背景那一點點色差分隔，
+     * 淺色主題下幾乎看不出來——這裡另外明確畫一條底線，不依賴背景色
+     * 對比夠不夠明顯。
+     */
     .data-table thead {
         @apply bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-800/60 dark:text-slate-400;
+    }
+
+    .data-table thead th {
+        @apply border-b-2 border-slate-300 dark:border-slate-700;
     }
 
     .data-table thead tr,
