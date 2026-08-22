@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasNaturalStringSort;
 use Database\Factories\StudentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -14,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Student extends Model
 {
     /** @use HasFactory<StudentFactory> */
-    use HasFactory;
+    use HasFactory, HasNaturalStringSort;
 
     public function schoolClass(): BelongsTo
     {
@@ -34,14 +35,8 @@ class Student extends Model
         return $this->belongsTo(User::class);
     }
 
-    /**
-     * seat_number 是字串欄位（見 migration），直接 orderBy 會讓 "10" 排到
-     * "2" 前面。跟 SchoolClassManager 排 class_number 用一樣的自然排序
-     * 手法，這裡收斂成共用 scope，避免每個要秀學生名單的地方各自重寫
-     * 一次、或忘記套用而漏掉這個問題。
-     */
     public function scopeOrderBySeatNumber(Builder $query): Builder
     {
-        return $query->orderByRaw('LENGTH(seat_number) asc')->orderBy('seat_number');
+        return $this->scopeNaturalSortBy($query, 'seat_number');
     }
 }

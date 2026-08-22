@@ -14,7 +14,7 @@
         </div>
 
         <div class="flex gap-2">
-            @foreach (\App\Livewire\Attendance\Recorder::PERIODS as $value => $label)
+            @foreach (\App\Livewire\Concerns\AttendancePeriods::PERIODS as $value => $label)
                 <button
                     type="button"
                     wire:click="$set('period', '{{ $value }}')"

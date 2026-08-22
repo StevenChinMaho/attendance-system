@@ -105,12 +105,9 @@ class SchoolClassManager extends Component
     public function render()
     {
         return view('livewire.admin.school-class-manager', [
-            // class_number 是字串欄位（保留容納非數字班級代號的彈性，見 migration
-            // 註解），直接排序會讓 "10" 排到 "2" 前面，所以先按長度排、再按字典序，
-            // 對純數字代號能達到自然排序的效果，非數字代號則退化成一般字串排序。
             'classes' => SchoolClass::with(['homeroomTeacher', 'students'])
                 ->orderByDesc('academic_year')->orderBy('grade')
-                ->orderByRaw('LENGTH(class_number) asc')->orderBy('class_number')
+                ->orderByClassNumber()
                 ->paginate(15),
             'teachers' => Teacher::orderBy('teacher_name')->get(),
         ]);

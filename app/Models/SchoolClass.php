@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasNaturalStringSort;
 use App\Policies\SchoolClassPolicy;
 use Database\Factories\SchoolClassFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\UsePolicy;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,7 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class SchoolClass extends Model
 {
     /** @use HasFactory<SchoolClassFactory> */
-    use HasFactory;
+    use HasFactory, HasNaturalStringSort;
 
     protected function casts(): array
     {
@@ -49,5 +51,10 @@ class SchoolClass extends Model
     public function label(): string
     {
         return "{$this->academic_year}學年度 {$this->grade}年{$this->class_number}班";
+    }
+
+    public function scopeOrderByClassNumber(Builder $query): Builder
+    {
+        return $this->scopeNaturalSortBy($query, 'class_number');
     }
 }

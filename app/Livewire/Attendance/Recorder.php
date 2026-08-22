@@ -3,6 +3,7 @@
 namespace App\Livewire\Attendance;
 
 use App\Enums\AttendanceStatus;
+use App\Livewire\Concerns\AttendancePeriods;
 use App\Models\AttendanceRecord;
 use App\Models\AttendanceSession;
 use App\Models\SchoolClass;
@@ -14,17 +15,6 @@ use Livewire\Component;
 
 class Recorder extends Component
 {
-    /**
-     * 目前只開放這三個時段，對應甲方「一天三次」的實際需求。故意不做成
-     * 資料庫層 enum，之後若要擴充成逐節點名（1~8節）只需要改這裡跟
-     * migration 註解說的驗證規則，不需要動資料表結構。
-     */
-    public const PERIODS = [
-        'MORNING' => '早上',
-        'NOON' => '中午',
-        'AFTERNOON' => '下午',
-    ];
-
     public SchoolClass $schoolClass;
 
     public string $date = '';
@@ -76,7 +66,7 @@ class Recorder extends Component
     {
         $this->schoolClass = $schoolClass;
         $this->date = now()->toDateString();
-        $this->period = $this->defaultPeriod();
+        $this->period = AttendancePeriods::current();
 
         $this->loadSession();
     }
@@ -105,7 +95,7 @@ class Recorder extends Component
     {
         $this->validate([
             'date' => ['required', 'date'],
-            'period' => ['required', Rule::in(array_keys(self::PERIODS))],
+            'period' => ['required', Rule::in(array_keys(AttendancePeriods::PERIODS))],
             'statuses.*' => [Rule::enum(AttendanceStatus::class)],
         ]);
 
@@ -196,15 +186,6 @@ class Recorder extends Component
                 ])
                 ->log($oldStatus === null ? '出席狀態建立' : '出席狀態變更');
         }
-    }
-
-    protected function defaultPeriod(): string
-    {
-        return match (true) {
-            now()->hour < 11 => 'MORNING',
-            now()->hour < 15 => 'NOON',
-            default => 'AFTERNOON',
-        };
     }
 
     protected function loadSession(): void

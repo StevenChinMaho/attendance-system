@@ -10,7 +10,7 @@
         @endunless
 
         <p class="mt-6 rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            這是暫時的登入後首頁，之後會依角色（副班長／導師／管理者）換成即時點名看板。上方導覽列可以直接切換功能。
+            上方導覽列可以直接切換功能。
         </p>
     </div>
 </x-layouts.app>

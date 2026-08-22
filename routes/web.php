@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\ShowClassStudentsController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\GoToMyClassAttendanceController;
 use App\Http\Controllers\ShowAttendanceController;
+use App\Http\Controllers\ShowDashboardController;
 use App\Http\Middleware\EnsureAccountIsActive;
 use Illuminate\Support\Facades\Route;
 
@@ -24,8 +25,9 @@ Route::post('/login', [LoginController::class, 'store']);
 Route::middleware(['auth', EnsureAccountIsActive::class])->group(function () {
     Route::post('/logout', [LoginController::class, 'destroy'])->name('logout');
 
-    // 暫時的登入後首頁，後續會換成依角色顯示的即時狀態看板。
-    Route::view('/dashboard', 'dashboard')->name('dashboard');
+    // 導師/管理者看即時點名看板，副班長看簡單歡迎頁——見
+    // ShowDashboardController，決定畫在哪個 view 的邏輯放在 controller。
+    Route::get('/dashboard', ShowDashboardController::class)->name('dashboard');
 
     Route::get('/attendance', GoToMyClassAttendanceController::class)->name('attendance.mine');
 

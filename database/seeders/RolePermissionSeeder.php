@@ -21,6 +21,7 @@ class RolePermissionSeeder extends Seeder
         $permissions = [
             'attendance.record',        // 送出/查看自己班級的點名（副班長、導師、管理者）
             'attendance.follow_up.manage', // 建立/編輯「處理情形」（導師、管理者）
+            'attendance.dashboard.view', // 查看全校即時點名看板（導師、管理者，副班長不用）
             'students.manage',          // 編輯學生資訊、所屬班級（管理者）
             'classes.manage',           // 新增/修改班級（管理者）
             'users.manage',             // 建立帳號、指派角色（管理者）
@@ -37,6 +38,7 @@ class RolePermissionSeeder extends Seeder
         $homeroomTeacher->syncPermissions([
             'attendance.record',
             'attendance.follow_up.manage',
+            'attendance.dashboard.view',
         ]);
 
         $admin = Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);

@@ -25,12 +25,14 @@
 依功能相依性排序，後面的階段建立在前面階段的資料表/權限之上：
 
 1. **帳號與登入基礎建設**（已完成）：`users` 表、spatie 角色權限套件、稽核套件、最小登入功能。
-2. **角色權限初始化**：建立 `admin`/`homeroom_teacher`/`student_rep` 角色與對應權限的 seeder；管理者後台建立/停用帳號的介面。
-3. **學年制度骨架**：`school_classes`、`students`、`teachers` 的 migration + model + 管理者 CRUD 介面（新增班級、編輯學生資訊、指派導師）。
-4. **點名核心功能**：`attendance_sessions`、`attendance_records`，含「一鍵全到」、股長/導師的點名操作介面。
-5. **處理情形與稽核**：`attendance_follow_ups`，串接 `spatie/laravel-activitylog` 記錄異動歷程。
-6. **即時狀態看板**：全校班級點名進度/缺席名單的 Dashboard（輪詢更新）。
-7. **正式環境部署**：最小化 Docker 映像、cloudflared 設定、上線前的資安複查。
+2. **角色權限初始化**（已完成）：`admin`/`homeroom_teacher`/`student_rep` 角色與對應權限的 seeder；管理者後台建立/停用/切換啟用狀態的帳號管理介面。
+3. **學年制度骨架**（已完成）：`school_classes`、`students`、`teachers` 的 migration + model + 管理者 CRUD 介面（新增班級、編輯學生資訊、指派導師）。
+4. **點名核心功能**（已完成）：`attendance_sessions`、`attendance_records`，含「一鍵全到」、股長/導師的點名操作介面、`SchoolClassPolicy` 範圍限制。
+5. **處理情形與稽核**（已完成）：`attendance_follow_ups`，串接 `spatie/laravel-activitylog` 記錄狀態異動歷程。
+6. **即時狀態看板**（已完成）：全校班級點名進度/缺席名單的 Dashboard（`wire:poll` 輪詢更新），依角色顯示不同內容——導師/管理者看全校總覽，副班長看簡單歡迎頁。
+7. **正式環境部署**（未開始）：最小化 Docker 映像、cloudflared 設定、上線前的資安複查。
+
+所有功能性開發階段（1~6）已完成，目前只剩部署階段。共用導覽列（`<x-nav-bar>`）在階段 4~5 之間補上，取代原本散落在各頁面的連結。
 
 每個階段開始前，先確認 [system_structure.md](system_structure.md) 裡對應的資料庫設計與業務規則沒有遺漏的疑問，避免中途發現設計缺口要回頭改 schema。
 
@@ -63,7 +65,7 @@
 
 此系統為非公開網站，帳號僅限於校內管理者分發，不可自主建立，並且所有存取與修改操作均須登入帳號，外來者永遠應該只能看到沒有任何資訊的登入介面。
 - 學生(副班長): 只能看見並管理自身班級的學生出席狀況
-- 班級導師: 擁有學生的權限，並可以針對缺席或遲到學生建立 "處理情形"，標註聯繫家長後了解到的學生資訊，例如 "遲到"、"病假"、"電聯未接"、"9:19已到"等等資訊。
+- 班級導師: 擁有學生的權限，並可以針對缺席或遲到學生建立 "處理情形"，標註聯繫家長後了解到的學生資訊，例如 "遲到"、"病假"、"電聯未接"、"9:19已到"等等資訊；登入後首頁看得到全校各班點名進度的即時看板（副班長看不到，只需要顧好自己班）。
 - 管理者: 除了擁有學生與班級導師的權限外、還可以編輯學生資訊、學生所在班級、新增或修改班級 (通常用於新學期升年級用)、以及建立使用者帳號並管理其權限。
 
 以上為預設角色設計，實際權限細節皆可透過權限套件於後台調整，保留彈性。
@@ -184,7 +186,7 @@ erDiagram
     attendance_follow_ups {
         int id PK
         int attendance_record_id FK
-        int teacher_id FK
+        int created_by FK
         string content
         timestamp created_at
     }
@@ -193,8 +195,8 @@ erDiagram
     users     o|--o| students : "可選登入帳號(副班長)"
     users     ||--o{ attendance_sessions : "送出點名"
     users     ||--o{ attendance_records : "最後修改"
+    users     ||--o{ attendance_follow_ups : "記錄人"
     teachers  ||--o{ school_classes : "擔任導師"
-    teachers  ||--o{ attendance_follow_ups : "記錄人"
     school_classes ||--o{ students : has
     school_classes ||--o{ attendance_sessions : has
     students  ||--o{ attendance_records : has
@@ -209,3 +211,4 @@ erDiagram
 - **`attendance_sessions.recorded_by`**：記錄此次點名是由哪個帳號送出（通常是副班長，也可能是導師代為補登），供權責追溯用，區別於「一個時段的點名是否已完成」（後者由 session 是否存在判斷）。
 - **唯一索引建議**：`attendance_records` 應對 `(attendance_session_id, student_id)` 建立唯一索引，避免同一學生在同一 session 出現重複紀錄。
 - **`teachers.user_id` / `students.user_id`**：皆為 nullable + unique，僅需要登入權限的教師/學生才會有值。
+- **`attendance_follow_ups.created_by`**：指向 `users` 而非 `teachers`——管理者也能建立處理情形，但管理者不一定有對應的 `teachers` 資料，跟 `recorded_by`/`updated_by` 保持一致，一律記登入帳號而非業務身份資料。
