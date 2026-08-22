@@ -8,6 +8,9 @@
     @livewireStyles
 </head>
 <body class="min-h-screen bg-slate-50 font-sans text-slate-900 antialiased">
+    @auth
+        <x-nav-bar />
+    @endauth
     {{ $slot }}
     @livewireScripts
 </body>
