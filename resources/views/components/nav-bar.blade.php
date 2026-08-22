@@ -12,11 +12,17 @@
             </a>
 
             @hasanyrole('student_rep|homeroom_teacher')
-                @php $ownClasses = auth()->user()->ownSchoolClasses(); @endphp
+                @php
+                    // 只列出「目前選取」學年度／學期裡的班級——這個選單是
+                    // 「我現在要點哪一班」的快捷方式，不是這個帳號歷史上
+                    // 管過的所有班級（那些仍可透過網址直接存取，見
+                    // SchoolClassPolicy），所以要跟著 nav bar 自己的學年度
+                    // 篩選走，不然選單裡會混進已經凍結的舊學期班級。
+                    $ownClasses = auth()->user()->ownSchoolClasses()
+                        ->where('academic_year', \App\Support\AcademicPeriod::selectedYear())
+                        ->where('semester', \App\Support\AcademicPeriod::selectedSemester());
+                @endphp
                 @if ($ownClasses->count() > 1)
-                    {{-- 帳號名下有不只一個班（同時或跨學期帶過不只一班）——見
-                         App\Models\User::ownSchoolClasses()，改成下拉選單讓
-                         使用者自己選要管理哪一班，不能再固定顯示某一班。 --}}
                     <select
                         onchange="if (this.value) { window.location.href = this.value; }"
                         class="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700"
@@ -24,7 +30,7 @@
                         <option value="">點名（選擇班級）</option>
                         @foreach ($ownClasses as $ownClass)
                             <option value="{{ route('attendance.show', $ownClass) }}">
-                                {{ $ownClass->label() }}
+                                {{ $ownClass->shortLabel() }}
                             </option>
                         @endforeach
                     </select>

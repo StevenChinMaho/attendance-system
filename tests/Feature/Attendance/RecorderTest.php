@@ -10,6 +10,7 @@ use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\User;
+use App\Support\AcademicPeriod;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -115,30 +116,50 @@ class RecorderTest extends TestCase
             ->assertRedirect(route('attendance.show', $class));
     }
 
-    public function test_mine_route_redirects_teacher_to_their_most_recent_homeroom_class(): void
+    public function test_mine_route_redirects_to_the_class_within_the_currently_selected_academic_period(): void
     {
         // 一位導師可能帶過好幾個學年度的班級（每學年的班級都是獨立紀錄），
-        // /attendance 應該導去「現在」帶的那個班，不是隨機/最舊的一筆。
+        // /attendance 該自動導去「目前選取」學年度／學期裡的那一班（見
+        // App\Support\AcademicPeriod），不是隨便挑一筆。
         $teacherUser = User::factory()->create();
         $teacherUser->assignRole('homeroom_teacher');
         $teacher = Teacher::factory()->create(['user_id' => $teacherUser->id]);
 
         $oldClass = SchoolClass::factory()->create([
-            'academic_year' => 112, 'homeroom_teacher_id' => $teacher->id,
+            'academic_year' => 112, 'semester' => 1, 'homeroom_teacher_id' => $teacher->id,
         ]);
         $currentClass = SchoolClass::factory()->create([
-            'academic_year' => 113, 'homeroom_teacher_id' => $teacher->id,
+            'academic_year' => 113, 'semester' => 1, 'homeroom_teacher_id' => $teacher->id,
         ]);
 
+        AcademicPeriod::setSelected(113, 1);
         $this->actingAs($teacherUser)
             ->get('/attendance')
             ->assertRedirect(route('attendance.show', $currentClass));
 
-        // 導師換帶新班級後，舊班級不會被自動收回存取權——過去帶過的班級
-        // 之後仍可能需要回頭補登或更正點名紀錄，見 User::ownSchoolClasses()
-        // 跟 SchoolClassPolicy。nav bar 換帶多班的帳號會顯示班級選單
-        // （見下面 test_nav_bar_shows_a_class_picker_...）讓使用者自己選。
+        // 換到舊班級所在的學年度，/attendance 自動導向的目標也跟著換——
+        // 直接用網址造訪任一班仍然允許（見 SchoolClassPolicy、
+        // User::ownSchoolClasses()，換帶新班不會自動收回舊班存取權），
+        // 只有「自動導去哪一班」這件事跟著目前選取的學年度走。
+        AcademicPeriod::setSelected(112, 1);
+        $this->actingAs($teacherUser)
+            ->get('/attendance')
+            ->assertRedirect(route('attendance.show', $oldClass));
+
         $this->actingAs($teacherUser)->get("/attendance/{$oldClass->id}")->assertOk();
+    }
+
+    public function test_mine_route_shows_a_helpful_error_when_no_class_exists_in_the_selected_period(): void
+    {
+        $class = SchoolClass::factory()->create(['academic_year' => 112, 'semester' => 1]);
+        $rep = $this->studentRepFor($class);
+
+        // 目前選取的預設是「目前」學年度／學期，跟這位副班長實際的班級
+        // 所在學年度不同——不代表帳號沒有連結任何班級，只是不在目前
+        // 選取的範圍裡，提示應該引導使用者切換學年度而不是聯絡管理者。
+        $this->actingAs($rep)
+            ->get('/attendance')
+            ->assertRedirect(route('dashboard'));
     }
 
     public function test_teacher_with_concurrent_homeroom_classes_can_access_both(): void
@@ -168,8 +189,8 @@ class RecorderTest extends TestCase
 
         $response = $this->actingAs($teacherUser)->get('/dashboard');
 
-        $response->assertSee($classA->label());
-        $response->assertSee($classB->label());
+        $response->assertSee($classA->shortLabel());
+        $response->assertSee($classB->shortLabel());
     }
 
     public function test_nav_bar_shows_a_plain_link_when_the_account_has_only_one_class(): void

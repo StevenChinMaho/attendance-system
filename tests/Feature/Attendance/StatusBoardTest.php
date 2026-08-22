@@ -89,7 +89,7 @@ class StatusBoardTest extends TestCase
         Livewire::actingAs($admin)
             ->test(StatusBoard::class)
             ->assertSee('尚未點名')
-            ->assertSee($class->label());
+            ->assertSee($class->shortLabel());
     }
 
     public function test_a_submitted_session_shows_correct_counts_and_exception_list(): void
@@ -138,8 +138,8 @@ class StatusBoardTest extends TestCase
 
         Livewire::actingAs($admin)
             ->test(StatusBoard::class)
-            ->assertSee($currentClass->label())
-            ->assertDontSee($otherYearClass->label());
+            ->assertSee($currentClass->shortLabel())
+            ->assertDontSee($otherYearClass->shortLabel());
     }
 
     public function test_switching_the_academic_period_immediately_refreshes_the_board(): void
@@ -151,7 +151,7 @@ class StatusBoardTest extends TestCase
         $admin->assignRole('admin');
 
         $component = Livewire::actingAs($admin)->test(StatusBoard::class);
-        $component->assertSee($currentClass->label())->assertDontSee($otherClass->label());
+        $component->assertSee($currentClass->shortLabel())->assertDontSee($otherClass->shortLabel());
 
         // 模擬 nav bar 的 AcademicPeriodSwitcher 已經把新選擇寫進 session，
         // 並廣播 academic-period-changed 事件——看板不需要使用者自己手動
@@ -159,6 +159,6 @@ class StatusBoardTest extends TestCase
         AcademicPeriod::setSelected(112, 1);
         $component->dispatch('academic-period-changed');
 
-        $component->assertSee($otherClass->label())->assertDontSee($currentClass->label());
+        $component->assertSee($otherClass->shortLabel())->assertDontSee($currentClass->shortLabel());
     }
 }

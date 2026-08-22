@@ -1,5 +1,5 @@
 <div class="mx-auto max-w-3xl px-4 py-10">
-    <h1 class="text-lg font-semibold text-slate-900">{{ $schoolClass->label() }} 點名</h1>
+    <h1 class="text-lg font-semibold text-slate-900">{{ $schoolClass->shortLabel() }} 點名</h1>
 
     @if (session('status'))
         <div class="mt-4 rounded-md bg-emerald-50 px-4 py-3 text-sm text-emerald-700">

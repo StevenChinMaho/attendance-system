@@ -2,7 +2,7 @@
     <a href="{{ route('admin.classes') }}" class="text-xs text-slate-500 underline hover:text-slate-700">← 回班級列表</a>
 
     <div class="mt-2 flex items-center justify-between">
-        <h1 class="text-lg font-semibold text-slate-900">{{ $schoolClass->label() }} 學生管理</h1>
+        <h1 class="text-lg font-semibold text-slate-900">{{ $schoolClass->shortLabel() }} 學生管理</h1>
         <button
             type="button"
             wire:click="$toggle('showCreateForm')"

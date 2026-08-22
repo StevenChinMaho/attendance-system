@@ -110,7 +110,7 @@
                             @error('classNumber') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
                         </td>
                     @else
-                        <td class="px-4 py-2">{{ $class->label() }}</td>
+                        <td class="px-4 py-2">{{ $class->shortLabel() }}</td>
                         <td class="px-4 py-2">{{ $class->homeroomTeacher?->teacher_name ?? '尚未指派' }}</td>
                         <td class="px-4 py-2">{{ $class->students->count() }}</td>
                         <td class="px-4 py-2 text-right space-x-3">

@@ -91,7 +91,7 @@ class SchoolClassManager extends Component
 
         $this->reset(['grade', 'classNumber', 'homeroomTeacherId', 'showCreateForm']);
 
-        session()->flash('status', "班級「{$class->label()}」建立成功。");
+        session()->flash('status', "班級「{$class->shortLabel()}」建立成功。");
     }
 
     public function startEdit(SchoolClass $schoolClass): void
@@ -119,7 +119,7 @@ class SchoolClassManager extends Component
 
         $this->cancelEdit();
 
-        session()->flash('status', "班級「{$class->label()}」已更新。");
+        session()->flash('status', "班級「{$class->shortLabel()}」已更新。");
     }
 
     public function cancelEdit(): void

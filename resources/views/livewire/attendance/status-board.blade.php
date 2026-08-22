@@ -45,7 +45,7 @@
             <tbody class="divide-y divide-slate-100">
                 @forelse ($summaries as $summary)
                     <tr>
-                        <td class="px-4 py-2 align-top font-medium text-slate-900">{{ $summary['class']->label() }}</td>
+                        <td class="px-4 py-2 align-top font-medium text-slate-900">{{ $summary['class']->shortLabel() }}</td>
                         <td class="px-4 py-2 align-top">
                             @if ($summary['submitted'])
                                 <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">已點名</span>

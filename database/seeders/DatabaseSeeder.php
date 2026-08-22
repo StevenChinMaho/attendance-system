@@ -21,5 +21,12 @@ class DatabaseSeeder extends Seeder
             'name' => 'Test Admin',
             'username' => 'admin',
         ])->assignRole('admin');
+
+        // 固定的示範班級／導師／副班長資料，只在本機開發／測試環境跑——
+        // 正式環境的帳號一律由管理者在後台建立，不應該有已知密碼的帳號
+        // 隨 migrate --seed 自動生出來。見 DemoDataSeeder 的說明。
+        if (app()->environment(['local', 'testing'])) {
+            $this->call(DemoDataSeeder::class);
+        }
     }
 }
