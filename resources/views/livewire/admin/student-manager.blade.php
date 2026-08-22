@@ -64,6 +64,14 @@
 
     <div class="table-wrap mt-6">
         <table class="data-table">
+            <colgroup>
+                <col style="width: 10%">
+                <col style="width: 16%">
+                <col style="width: 22%">
+                <col style="width: 10%">
+                <col style="width: 22%">
+                <col style="width: 20%">
+            </colgroup>
             <thead>
                 <tr>
                     <th>座號</th>

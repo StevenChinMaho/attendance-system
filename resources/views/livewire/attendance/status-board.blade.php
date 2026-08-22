@@ -35,6 +35,23 @@
 
     <div class="table-wrap mt-4">
         <table class="data-table">
+            {{--
+                固定欄寬比例，不受「已點名/尚未點名」文字長短或未點名時
+                整列 colspan 併成一格影響——沒有這個，table-fixed 只會讓
+                所有欄位平分寬度（班級名稱那欄反而會太窄），所以還是要
+                自己給每欄一個合理比例。狀態欄位數會隨 AttendanceStatus
+                增減，寬度用剩餘空間除以欄位數算，不寫死。
+            --}}
+            @php $statusColumnWidth = 36 / max(count($statusOptions), 1); @endphp
+            <colgroup>
+                <col style="width: 16%">
+                <col style="width: 12%">
+                <col style="width: 8%">
+                @foreach ($statusOptions as $option)
+                    <col style="width: {{ $statusColumnWidth }}%">
+                @endforeach
+                <col style="width: 28%">
+            </colgroup>
             <thead>
                 <tr>
                     <th>班級</th>

@@ -39,6 +39,11 @@
 
     <div class="table-wrap mt-6">
         <table class="data-table">
+            <colgroup>
+                <col style="width: 35%">
+                <col style="width: 35%">
+                <col style="width: 30%">
+            </colgroup>
             <thead>
                 <tr>
                     <th>姓名</th>

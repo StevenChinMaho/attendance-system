@@ -144,14 +144,18 @@
     /*
      * 表格：垂直格線刻意保留（見 system_structure.md 使用者反饋）——
      * divide-x 讓同一列的每個儲存格之間都有一條直向分隔線，不是只有
-     * 外框跟列與列之間的橫線。
+     * 外框跟列與列之間的橫線。table-fixed 讓欄寬只由 <colgroup>（各個
+     * table blade 自己定義）決定，不受該欄目前顯示的文字長短影響——
+     * 不然像即時看板「點名狀態」欄，不同班級是「已點名」還是「尚未
+     * 點名」寬度不一樣，或者未點名時整列用 colspan 併成一個大儲存格，
+     * 都會讓瀏覽器重新計算欄寬造成整張表左右跳動。
      */
     .table-wrap {
         @apply overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800;
     }
 
     .data-table {
-        @apply w-full text-sm;
+        @apply w-full table-fixed text-sm;
     }
 
     .data-table thead {
@@ -163,13 +167,18 @@
         @apply divide-x divide-slate-200 dark:divide-slate-800;
     }
 
+    /*
+     * divide-slate-100 在淺色主題下太淡，跟白色背景幾乎分不出來——這裡
+     * 特意比垂直格線（divide-slate-200）再深一階，讓橫向格線至少跟
+     * 垂直格線一樣看得清楚，不會反而更不明顯。
+     */
     .data-table tbody {
-        @apply divide-y divide-slate-100 dark:divide-slate-800;
+        @apply divide-y divide-slate-300 dark:divide-slate-800;
     }
 
     .data-table th,
     .data-table td {
-        @apply px-4 py-2;
+        @apply px-4 py-2 break-words;
     }
 
     .data-table tbody tr:hover {
