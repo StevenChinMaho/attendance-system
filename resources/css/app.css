@@ -62,6 +62,15 @@
     body {
         @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100;
     }
+
+    /*
+     * Alpine 的慣例：x-cloak 標記的元素在 Alpine 真正接手、算出
+     * x-show 的初始值之前，先用這條規則強制隱藏，避免頁面剛載入的
+     * 那一瞬間先閃一下不該顯示的內容（例如懸浮視窗的處理情形卡片）。
+     */
+    [x-cloak] {
+        display: none !important;
+    }
 }
 
 @layer components {

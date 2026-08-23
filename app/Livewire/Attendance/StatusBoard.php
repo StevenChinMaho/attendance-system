@@ -2,9 +2,9 @@
 
 namespace App\Livewire\Attendance;
 
-use App\Enums\AttendanceStatus;
 use App\Livewire\Concerns\AttendancePeriods;
 use App\Livewire\Concerns\ScopesToSelectedAcademicPeriod;
+use App\Models\AttendanceRecord;
 use App\Models\SchoolClass;
 use Illuminate\Support\Collection;
 use Livewire\Component;
@@ -19,14 +19,16 @@ use Livewire\Component;
  * App\Livewire\Concerns\ScopesToSelectedAcademicPeriod）——這是全站
  * 最高層級的篩選，看板不例外，不然舊學年度已經凍結的班級會一直混在
  * 「目前」的總覽裡。
+ *
+ * 看板一次呈現「這一天」早/中/下午三個時段的彙總（見 summarize()），
+ * 不再像 Recorder 那樣一次只看一個時段——這裡要回答的問題是「今天
+ * 整體狀況如何」，早自己選時段反而要來回切三次才看得到全貌。
  */
 class StatusBoard extends Component
 {
     use ScopesToSelectedAcademicPeriod;
 
     public string $date = '';
-
-    public string $period = '';
 
     /**
      * boot() 每次請求（含 wire:poll 的輪詢請求）都會重跑，不只是初次
@@ -44,7 +46,6 @@ class StatusBoard extends Component
     public function mount(): void
     {
         $this->date = now()->toDateString();
-        $this->period = AttendancePeriods::current();
     }
 
     public function render()
@@ -53,9 +54,9 @@ class StatusBoard extends Component
             ->where('academic_year', $this->selectedAcademicYear)
             ->where('semester', $this->selectedSemester)
             ->with(['students', 'attendanceSessions' => function ($query) {
-                $query->where('date', $this->date)
-                    ->where('period', $this->period)
-                    ->with('records');
+                // 這一天三個時段的 session 一次撈出來（不再只篩單一
+                // 時段），summarize() 自己依時段分組。
+                $query->where('date', $this->date)->with(['records.followUps']);
             }])
             ->orderBy('grade')
             ->orderByClassNumber()
@@ -63,48 +64,49 @@ class StatusBoard extends Component
 
         return view('livewire.attendance.status-board', [
             'summaries' => $classes->map(fn (SchoolClass $class) => $this->summarize($class)),
-            'statusOptions' => AttendanceStatus::cases(),
+            'periods' => AttendancePeriods::PERIODS,
         ]);
     }
 
     /**
-     * @return array{class: SchoolClass, submitted: bool, total: int, counts: Collection, exceptions: Collection}
+     * @return array{class: SchoolClass, total: int, periods: array<string, array{submitted: bool, present?: int, absent?: int}>, exceptions: Collection}
      */
     protected function summarize(SchoolClass $class): array
     {
-        // 一個班同一天同一時段只會有一筆 session（migration 的唯一索引
-        // 保證），eager load 時已經用 date+period 篩過，這裡直接取第一筆。
-        $session = $class->attendanceSessions->first();
+        $sessionsByPeriod = $class->attendanceSessions->keyBy('period');
+        $exceptions = collect();
 
-        if (! $session) {
-            return [
-                'class' => $class,
-                'submitted' => false,
-                'total' => $class->students->count(),
-                'counts' => collect(),
-                'exceptions' => collect(),
-            ];
-        }
+        $periods = collect(AttendancePeriods::PERIODS)->mapWithKeys(function (string $periodLabel, string $periodValue) use ($sessionsByPeriod, $class, &$exceptions) {
+            $session = $sessionsByPeriod->get($periodValue);
 
-        $records = $session->records;
+            if (! $session) {
+                return [$periodValue => ['submitted' => false]];
+            }
 
-        $counts = collect(AttendanceStatus::cases())->mapWithKeys(
-            fn (AttendanceStatus $status) => [$status->value => $records->where('status', $status)->count()]
-        );
+            $presentCount = $session->records->filter(fn (AttendanceRecord $record) => $record->status->countsAsPresent())->count();
 
-        $exceptions = $records
-            ->reject(fn ($record) => $record->status === AttendanceStatus::Present)
-            ->map(fn ($record) => [
-                'name' => $class->students->firstWhere('id', $record->student_id)?->name ?? '（學生資料不存在）',
-                'status' => $record->status->label(),
-            ])
-            ->values();
+            $exceptionRecords = $session->records->reject(fn (AttendanceRecord $record) => $record->status->countsAsPresent());
+
+            foreach ($exceptionRecords as $record) {
+                $exceptions->push([
+                    'name' => $class->students->firstWhere('id', $record->student_id)?->name ?? '（學生資料不存在）',
+                    'period' => $periodLabel,
+                    'status' => $record->status->label(),
+                    'followUps' => $record->followUps,
+                ]);
+            }
+
+            return [$periodValue => [
+                'submitted' => true,
+                'present' => $presentCount,
+                'absent' => $session->records->count() - $presentCount,
+            ]];
+        });
 
         return [
             'class' => $class,
-            'submitted' => true,
             'total' => $class->students->count(),
-            'counts' => $counts,
+            'periods' => $periods,
             'exceptions' => $exceptions,
         ];
     }

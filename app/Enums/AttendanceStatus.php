@@ -24,4 +24,18 @@ enum AttendanceStatus: string
             self::EarlyLeave => '早退',
         };
     }
+
+    /**
+     * 即時看板把四種狀態併成「出席」「缺席」兩欄統計：遲到人還是有到
+     * 校，算在出席那一邊；早退人提早離校，算在缺席那一邊。副班長/導師
+     * 逐筆記錄時仍然要分四種，只有全校總覽這種「一眼看出有沒有問題」
+     * 的彙總畫面才需要這個二分法。
+     */
+    public function countsAsPresent(): bool
+    {
+        return match ($this) {
+            self::Present, self::Late => true,
+            self::Absent, self::EarlyLeave => false,
+        };
+    }
 }

@@ -78,7 +78,7 @@ class StatusBoardTest extends TestCase
         $component->call('$refresh')->assertForbidden();
     }
 
-    public function test_a_class_with_no_session_for_the_selected_period_shows_as_not_submitted(): void
+    public function test_a_class_with_no_sessions_for_the_day_shows_every_period_as_not_submitted(): void
     {
         $class = SchoolClass::factory()->create();
         Student::factory()->for($class, 'schoolClass')->count(3)->create();
@@ -88,42 +88,83 @@ class StatusBoardTest extends TestCase
 
         Livewire::actingAs($admin)
             ->test(StatusBoard::class)
-            ->assertSee('尚未點名')
+            ->assertSee('未點名')
             ->assertSee($class->shortLabel());
     }
 
-    public function test_a_submitted_session_shows_correct_counts_and_exception_list(): void
+    public function test_late_counts_as_present_and_early_leave_counts_as_absent(): void
     {
+        // 看板把四種狀態併成「出席」（出席、遲到）跟「缺席」（缺席、
+        // 早退）兩欄——遲到人還是有到校，早退人提早離校，見
+        // AttendanceStatus::countsAsPresent()。
         $class = SchoolClass::factory()->create();
         $teacherUser = User::factory()->create();
         $teacherUser->assignRole('homeroom_teacher');
         $teacher = Teacher::factory()->create(['user_id' => $teacherUser->id]);
         $class->update(['homeroom_teacher_id' => $teacher->id]);
 
+        $late = Student::factory()->for($class, 'schoolClass')->create(['name' => '遲到同學']);
+        $earlyLeave = Student::factory()->for($class, 'schoolClass')->create(['name' => '早退同學']);
         $absent = Student::factory()->for($class, 'schoolClass')->create(['name' => '缺席同學']);
         $present = Student::factory()->for($class, 'schoolClass')->create(['name' => '出席同學']);
+
+        $period = AttendancePeriods::current();
+
+        $session = $class->attendanceSessions()->create([
+            'date' => now()->toDateString(),
+            'period' => $period,
+            'recorded_by' => $teacherUser->id,
+        ]);
+        $session->records()->createMany([
+            ['student_id' => $late->id, 'status' => AttendanceStatus::Late, 'updated_by' => $teacherUser->id],
+            ['student_id' => $earlyLeave->id, 'status' => AttendanceStatus::EarlyLeave, 'updated_by' => $teacherUser->id],
+            ['student_id' => $absent->id, 'status' => AttendanceStatus::Absent, 'updated_by' => $teacherUser->id],
+            ['student_id' => $present->id, 'status' => AttendanceStatus::Present, 'updated_by' => $teacherUser->id],
+        ]);
+
+        $summaries = Livewire::actingAs($teacherUser)->test(StatusBoard::class)->viewData('summaries');
+        $summary = $summaries->first(fn ($summary) => $summary['class']->is($class));
+
+        $this->assertSame(2, $summary['periods'][$period]['present']);
+        $this->assertSame(2, $summary['periods'][$period]['absent']);
+
+        // 需留意學生只列缺席跟早退，遲到不算例外，出席更不用說。
+        $exceptionNames = $summary['exceptions']->pluck('name');
+        $this->assertTrue($exceptionNames->contains('缺席同學'));
+        $this->assertTrue($exceptionNames->contains('早退同學'));
+        $this->assertFalse($exceptionNames->contains('遲到同學'));
+        $this->assertFalse($exceptionNames->contains('出席同學'));
+    }
+
+    public function test_exception_entries_carry_their_follow_up_notes_for_the_hover_tooltip(): void
+    {
+        // 「需留意學生」游標懸浮要能看到處理情形，資料要跟著彙總結果
+        // 一起帶出來（見 StatusBoard::render() 的 with(['records.followUps'])），
+        // 不是等使用者真的懸浮時才另外查。
+        $class = SchoolClass::factory()->create();
+        $teacherUser = User::factory()->create();
+        $teacherUser->assignRole('homeroom_teacher');
+        $teacher = Teacher::factory()->create(['user_id' => $teacherUser->id]);
+        $class->update(['homeroom_teacher_id' => $teacher->id]);
+
+        $student = Student::factory()->for($class, 'schoolClass')->create(['name' => '缺席同學']);
 
         $session = $class->attendanceSessions()->create([
             'date' => now()->toDateString(),
             'period' => AttendancePeriods::current(),
             'recorded_by' => $teacherUser->id,
         ]);
-        $session->records()->create([
-            'student_id' => $absent->id,
+        $record = $session->records()->create([
+            'student_id' => $student->id,
             'status' => AttendanceStatus::Absent,
             'updated_by' => $teacherUser->id,
         ]);
-        $session->records()->create([
-            'student_id' => $present->id,
-            'status' => AttendanceStatus::Present,
-            'updated_by' => $teacherUser->id,
-        ]);
+        $record->followUps()->create(['created_by' => $teacherUser->id, 'content' => '電聯未接']);
 
         Livewire::actingAs($teacherUser)
             ->test(StatusBoard::class)
-            ->assertSee('已點名')
             ->assertSee('缺席同學')
-            ->assertDontSee('出席同學'); // 出席不算例外，不需要在「需留意學生」裡列出
+            ->assertSee('電聯未接');
     }
 
     public function test_classes_outside_the_selected_academic_period_are_not_shown(): void
