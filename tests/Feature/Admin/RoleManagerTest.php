@@ -50,12 +50,17 @@ class RoleManagerTest extends TestCase
 
     public function test_admin_can_view_the_role_list(): void
     {
+        // 內建三個角色的英文代號一律透過 App\Support\RoleLabel 轉成中文
+        // 顯示（見 CLAUDE.md「角色/身分」的用語說明），畫面上看不到原始
+        // 的英文代號。
         $this->actingAs($this->admin())
             ->get('/admin/roles')
             ->assertOk()
-            ->assertSee('admin')
-            ->assertSee('homeroom_teacher')
-            ->assertSee('student_rep');
+            ->assertSee('管理者')
+            ->assertSee('導師')
+            ->assertSee('副班長')
+            ->assertDontSee('homeroom_teacher')
+            ->assertDontSee('student_rep');
     }
 
     public function test_admin_can_create_a_custom_role_with_selected_permissions(): void

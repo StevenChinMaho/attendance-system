@@ -34,11 +34,11 @@
             </div>
 
             <div>
-                <label class="field-label">角色</label>
+                <label class="field-label">身分</label>
                 <select wire:model="role" class="field-input">
                     <option value="">請選擇</option>
                     @foreach ($roles as $roleName)
-                        <option value="{{ $roleName }}">{{ $roleName }}</option>
+                        <option value="{{ $roleName }}">{{ \App\Support\RoleLabel::forName($roleName) }}</option>
                     @endforeach
                 </select>
                 @error('role') <p class="field-error">{{ $message }}</p> @enderror
@@ -64,7 +64,7 @@
                 <tr>
                     <th>姓名</th>
                     <th>帳號</th>
-                    <th>角色</th>
+                    <th>身分</th>
                     <th>狀態</th>
                     <th>最後登入</th>
                     <th></th>
@@ -75,7 +75,7 @@
                     <tr>
                         <td>{{ $user->name }}</td>
                         <td>{{ $user->username }}</td>
-                        <td>{{ $user->roles->pluck('name')->join('、') ?: '—' }}</td>
+                        <td>{{ $user->roles->pluck('name')->map(fn ($name) => \App\Support\RoleLabel::forName($name))->join('、') ?: '—' }}</td>
                         <td>
                             <span class="{{ $user->is_active ? 'badge-success' : 'badge-neutral' }}">
                                 {{ $user->is_active ? '啟用中' : '已停用' }}

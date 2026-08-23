@@ -1,12 +1,12 @@
 <div class="mx-auto max-w-5xl px-4 py-10">
     <div class="flex items-center justify-between">
-        <h1 class="page-title">角色管理</h1>
+        <h1 class="page-title">身分管理</h1>
         <button type="button" wire:click="toggleCreateForm" class="btn-primary">
-            {{ $showCreateForm ? '取消' : '新增角色' }}
+            {{ $showCreateForm ? '取消' : '新增身分' }}
         </button>
     </div>
     <p class="page-subtitle mt-1">
-        新增角色後，到「帳號管理」把角色指派給帳號即可——那個角色能看到、進入哪些後台頁面，
+        新增身分後，到「帳號管理」把身分指派給帳號即可——那個身分能看到、進入哪些後台頁面，
         由這裡勾選的權限決定。
     </p>
 
@@ -21,9 +21,9 @@
     @if ($showCreateForm)
         <form wire:submit="createRole" class="surface mt-6 space-y-4 p-6">
             <div>
-                <label class="field-label">角色名稱</label>
+                <label class="field-label">身分名稱</label>
                 <input type="text" wire:model="name" class="field-input">
-                <p class="field-hint">僅供系統內部識別，建議用英文代號（例如 exam_supervisor）。</p>
+                <p class="field-hint">取一個好懂的名稱即可（例如：教務處人員），會直接顯示在畫面上。</p>
                 @error('name') <p class="field-error">{{ $message }}</p> @enderror
             </div>
 
@@ -36,7 +36,7 @@
                                 type="checkbox"
                                 wire:model="selectedPermissions"
                                 value="{{ $permission->name }}"
-                                class="rounded border-slate-300 dark:border-slate-600"
+                                class="field-checkbox"
                             >
                             {{ $permissionLabels[$permission->name] ?? $permission->name }}
                         </label>
@@ -44,7 +44,7 @@
                 </div>
             </div>
 
-            <button type="submit" class="btn-primary">建立角色</button>
+            <button type="submit" class="btn-primary">建立身分</button>
         </form>
     @endif
 
@@ -59,7 +59,7 @@
             </colgroup>
             <thead>
                 <tr>
-                    <th>角色</th>
+                    <th>身分</th>
                     @foreach ($permissions as $permission)
                         <th class="text-center">{{ $permissionLabels[$permission->name] ?? $permission->name }}</th>
                     @endforeach
@@ -71,7 +71,7 @@
                     @php $isProtected = in_array($role->name, $protectedRoleNames, true); @endphp
                     <tr>
                         <td>
-                            {{ $role->name }}
+                            {{ \App\Support\RoleLabel::forName($role->name) }}
                             @if ($isProtected)
                                 <span class="badge-neutral">系統內建</span>
                             @endif
@@ -83,11 +83,11 @@
                                     @checked($role->permissions->contains('name', $permission->name))
                                     @if ($isProtected)
                                         disabled
-                                        title="系統內建角色的權限無法調整"
+                                        title="系統內建身分的權限無法調整"
                                     @else
                                         wire:click="togglePermission({{ $role->id }}, '{{ $permission->name }}')"
                                     @endif
-                                    class="rounded border-slate-300 dark:border-slate-600"
+                                    class="field-checkbox"
                                 >
                             </td>
                         @endforeach
@@ -97,7 +97,7 @@
                                     <button
                                         type="button"
                                         wire:click="deleteRole({{ $role->id }})"
-                                        wire:confirm="確定要刪除角色「{{ $role->name }}」嗎？"
+                                        wire:confirm="確定要刪除身分「{{ \App\Support\RoleLabel::forName($role->name) }}」嗎？"
                                         class="btn-danger-ghost btn-xs"
                                     >
                                         刪除

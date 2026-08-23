@@ -41,7 +41,7 @@
             @endcan
             @can('roles.manage')
                 <a href="{{ route('admin.roles') }}" class="{{ $linkClass(request()->routeIs('admin.roles')) }}">
-                    角色管理
+                    身分管理
                 </a>
             @endcan
         </div>
