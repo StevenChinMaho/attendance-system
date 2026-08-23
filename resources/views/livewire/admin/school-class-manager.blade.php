@@ -17,6 +17,12 @@
         </div>
     @endif
 
+    @if (session('error'))
+        <div class="alert-error mt-4">
+            {{ session('error') }}
+        </div>
+    @endif
+
     @if ($showCreateForm)
         <form wire:submit="createClass" class="surface mt-6 grid grid-cols-2 gap-4 p-6">
             <div>
@@ -164,6 +170,16 @@
                                     <button type="button" wire:click="startEdit({{ $class->id }})" class="btn-secondary btn-xs">
                                         編輯
                                     </button>
+                                    @if ($class->students->isEmpty())
+                                        <button
+                                            type="button"
+                                            wire:click="deleteClass({{ $class->id }})"
+                                            wire:confirm="確定要刪除班級「{{ $class->shortLabel() }}」嗎？此操作無法復原。"
+                                            class="btn-danger-ghost btn-xs"
+                                        >
+                                            刪除
+                                        </button>
+                                    @endif
                                 </div>
                             </td>
                         @endif

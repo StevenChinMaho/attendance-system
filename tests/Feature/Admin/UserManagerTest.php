@@ -3,12 +3,15 @@
 namespace Tests\Feature\Admin;
 
 use App\Livewire\Admin\UserManager;
+use App\Models\AttendanceSession;
+use App\Models\SchoolClass;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class UserManagerTest extends TestCase
@@ -177,5 +180,200 @@ class UserManagerTest extends TestCase
             ->call('toggleActive', $admin->id);
 
         $this->assertTrue($admin->fresh()->is_active);
+    }
+
+    public function test_creating_a_user_forces_a_password_change_on_first_login(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        Livewire::actingAs($admin)
+            ->test(UserManager::class)
+            ->set('name', '新副班長')
+            ->set('username', 'newrep')
+            ->set('password', 'a-strong-password')
+            ->set('role', 'student_rep')
+            ->call('createUser');
+
+        $this->assertTrue(User::where('username', 'newrep')->firstOrFail()->must_change_password);
+    }
+
+    public function test_admin_can_edit_another_users_name_and_role(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $target = User::factory()->create(['name' => '舊名字']);
+        $target->assignRole('student_rep');
+
+        Livewire::actingAs($admin)
+            ->test(UserManager::class)
+            ->call('startEdit', $target->id)
+            ->set('name', '新名字')
+            ->set('role', 'homeroom_teacher')
+            ->call('updateUser')
+            ->assertHasNoErrors();
+
+        $fresh = $target->fresh();
+        $this->assertSame('新名字', $fresh->name);
+        $this->assertTrue($fresh->hasRole('homeroom_teacher'));
+        $this->assertFalse($fresh->hasRole('student_rep'));
+    }
+
+    public function test_admin_cannot_edit_their_own_account(): void
+    {
+        // 姓名還好，但身分欄位混在同一個表單裡，萬一手滑把自己的角色
+        // 改掉會直接把自己鎖出後台——乾脆整個編輯功能都不對自己開放。
+        $admin = User::factory()->create(['name' => '管理者本人']);
+        $admin->assignRole('admin');
+
+        Livewire::actingAs($admin)
+            ->test(UserManager::class)
+            ->call('startEdit', $admin->id)
+            ->assertSet('editingUserId', null);
+    }
+
+    public function test_opening_the_create_form_while_editing_closes_the_edit_form(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $target = User::factory()->create();
+
+        Livewire::actingAs($admin)
+            ->test(UserManager::class)
+            ->call('startEdit', $target->id)
+            ->assertSet('editingUserId', $target->id)
+            ->call('toggleCreateForm')
+            ->assertSet('showCreateForm', true)
+            ->assertSet('editingUserId', null)
+            ->assertSet('name', '');
+    }
+
+    public function test_admin_can_reset_another_users_password(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $target = User::factory()->create(['password' => bcrypt('old-password')]);
+
+        DB::table('sessions')->insert([
+            'id' => 'fake-session-id-reset',
+            'user_id' => $target->id,
+            'ip_address' => '127.0.0.1',
+            'user_agent' => 'test',
+            'payload' => base64_encode('x'),
+            'last_activity' => now()->timestamp,
+        ]);
+
+        Livewire::actingAs($admin)
+            ->test(UserManager::class)
+            ->call('startResetPassword', $target->id)
+            ->set('newPassword', 'a-brand-new-password')
+            ->call('resetPassword')
+            ->assertHasNoErrors();
+
+        $fresh = $target->fresh();
+        $this->assertTrue(Hash::check('a-brand-new-password', $fresh->password));
+        $this->assertTrue($fresh->must_change_password);
+        $this->assertDatabaseMissing('sessions', ['user_id' => $target->id]);
+    }
+
+    public function test_resetting_a_password_requires_at_least_eight_characters(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $target = User::factory()->create();
+
+        Livewire::actingAs($admin)
+            ->test(UserManager::class)
+            ->call('startResetPassword', $target->id)
+            ->set('newPassword', 'short')
+            ->call('resetPassword')
+            ->assertHasErrors('newPassword');
+    }
+
+    public function test_admin_cannot_reset_their_own_password_through_this_flow(): void
+    {
+        // 自己的密碼有專門的「變更密碼」自助頁面，不透過帳號管理這條路。
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        Livewire::actingAs($admin)
+            ->test(UserManager::class)
+            ->call('startResetPassword', $admin->id)
+            ->assertSet('resettingPasswordUserId', null);
+    }
+
+    public function test_admin_can_delete_a_user_with_no_history(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $target = User::factory()->create();
+
+        Livewire::actingAs($admin)
+            ->test(UserManager::class)
+            ->call('deleteUser', $target->id);
+
+        $this->assertModelMissing($target);
+    }
+
+    public function test_admin_cannot_delete_their_own_account(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        Livewire::actingAs($admin)
+            ->test(UserManager::class)
+            ->call('deleteUser', $admin->id);
+
+        $this->assertModelExists($admin);
+    }
+
+    public function test_the_last_admin_account_cannot_be_deleted(): void
+    {
+        $lastAdmin = User::factory()->create();
+        $lastAdmin->assignRole('admin');
+
+        // 用另一個持有 users.manage 權限、但不是這個 admin 本人的帳號
+        // 嘗試刪除——確保擋下來的是「這是系統裡最後一個 admin」這條
+        // 規則本身，不是「不能刪自己」那條（那條已經有獨立測試涵蓋）。
+        $role = Role::create(['name' => 'user_operator', 'guard_name' => 'web']);
+        $role->syncPermissions(['users.manage']);
+        $operator = User::factory()->create();
+        $operator->assignRole('user_operator');
+
+        Livewire::actingAs($operator)
+            ->test(UserManager::class)
+            ->call('deleteUser', $lastAdmin->id);
+
+        $this->assertModelExists($lastAdmin);
+    }
+
+    public function test_an_admin_can_be_deleted_when_another_admin_still_exists(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $secondAdmin = User::factory()->create();
+        $secondAdmin->assignRole('admin');
+
+        Livewire::actingAs($admin)
+            ->test(UserManager::class)
+            ->call('deleteUser', $secondAdmin->id);
+
+        $this->assertModelMissing($secondAdmin);
+    }
+
+    public function test_a_user_with_attendance_history_cannot_be_deleted(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $target = User::factory()->create();
+        $class = SchoolClass::factory()->create();
+        AttendanceSession::factory()->for($class, 'schoolClass')->create(['recorded_by' => $target->id]);
+
+        Livewire::actingAs($admin)
+            ->test(UserManager::class)
+            ->call('deleteUser', $target->id);
+
+        $this->assertModelExists($target);
     }
 }

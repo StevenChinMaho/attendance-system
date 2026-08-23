@@ -14,6 +14,10 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Traits\HasRoles;
 
+// must_change_password 故意不放進 Fillable：這是安全敏感的旗標，只
+// 應該由 UserManager 的建立/重設密碼流程用 forceFill() 明確設定（跟
+// last_login_at 一樣的處理方式），不開放透過一般的 create()/update()
+// 大量賦值意外帶到別的值。
 #[Fillable(['name', 'username', 'password', 'is_active'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
@@ -30,6 +34,7 @@ class User extends Authenticatable
     {
         return [
             'is_active' => 'boolean',
+            'must_change_password' => 'boolean',
             'last_login_at' => 'datetime',
             'password' => 'hashed',
         ];
@@ -125,5 +130,22 @@ class User extends Authenticatable
         DB::table(config('session.table', 'sessions'))
             ->where('user_id', $this->id)
             ->delete();
+    }
+
+    /**
+     * 這個帳號有沒有留下任何點名／處理情形的操作紀錄
+     * （attendance_sessions.recorded_by／attendance_records.updated_by／
+     * attendance_follow_ups.created_by）。三個外鍵在 migration 裡都沒有
+     * 設定 onDelete，資料庫層級預設是 RESTRICT，直接刪除會噴出未經
+     * 處理的例外——但就算資料庫沒有這層限制，語意上「這個帳號做過的
+     * 事」本來就不該因為帳號被刪除就憑空消失，破壞稽核歷程。
+     * UserManager::deleteUser() 用這個方法在刪除前先擋下來，給出清楚
+     * 的錯誤訊息，引導改用「停用」。
+     */
+    public function hasAttendanceHistory(): bool
+    {
+        return AttendanceSession::where('recorded_by', $this->id)->exists()
+            || AttendanceRecord::where('updated_by', $this->id)->exists()
+            || AttendanceFollowUp::where('created_by', $this->id)->exists();
     }
 }

@@ -177,6 +177,12 @@ class RoleManagerTest extends TestCase
 
         $limitedUser = User::where('username', 'examhelper')->first();
 
+        // UserManager::createUser() 強制新帳號首次登入要先改密碼（見
+        // EnsureUserHasChangedPassword），跟這裡要驗證的「頁面級權限」
+        // 是兩件事——直接把這個測試帳號標記成已經改過密碼，才不會每個
+        // 請求都被導去改密碼頁面而不是真正要測的頁面。
+        $limitedUser->forceFill(['must_change_password' => false])->save();
+
         $this->actingAs($limitedUser)
             ->get('/admin/teachers')
             ->assertOk();

@@ -103,6 +103,25 @@ class TeacherManager extends Component
         $this->reset(['editingTeacherId', 'teacherName', 'userId']);
     }
 
+    /**
+     * 目前還在帶班（homeroomClasses 不是空集合）的老師不能刪——刪掉只是
+     * 把 school_classes.homeroom_teacher_id 靜靜地 null 掉（migration
+     * 設的是 nullOnDelete），畫面上會突然冒出「尚未指派」，管理者不見得
+     * 記得回去處理。要刪的話請先到班級管理把導師改指派給別人或清空。
+     */
+    public function deleteTeacher(Teacher $teacher): void
+    {
+        if ($teacher->homeroomClasses()->exists()) {
+            session()->flash('error', "老師「{$teacher->displayName()}」目前還是某個班級的導師，無法刪除，請先在班級管理改指派其他導師。");
+
+            return;
+        }
+
+        $teacher->delete();
+
+        session()->flash('status', "老師「{$teacher->displayName()}」已刪除。");
+    }
+
     public function render()
     {
         return view('livewire.admin.teacher-manager', [

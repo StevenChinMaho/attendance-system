@@ -6,6 +6,7 @@ use App\Http\Controllers\GoToMyClassAttendanceController;
 use App\Http\Controllers\ShowAttendanceController;
 use App\Http\Controllers\ShowDashboardController;
 use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsureUserHasChangedPassword;
 use Illuminate\Support\Facades\Route;
 
 // 未登入者永遠只會看到登入頁面，不存在任何會外洩資訊的公開路由。
@@ -28,8 +29,14 @@ Route::middleware('guest')->group(function () {
 // 「目前若已登入其他帳號，先登出再登入新帳號」。
 Route::post('/login', [LoginController::class, 'store']);
 
-Route::middleware(['auth', EnsureAccountIsActive::class])->group(function () {
+Route::middleware(['auth', EnsureAccountIsActive::class, EnsureUserHasChangedPassword::class])->group(function () {
     Route::post('/logout', [LoginController::class, 'destroy'])->name('logout');
+
+    // 每個帳號自己變更密碼的地方，也是 EnsureUserHasChangedPassword
+    // 把「必須先改密碼」的帳號導去的目的地——跟 logout 一樣要排除在
+    // 這個 middleware 的檢查範圍之外，不然會卡進無限迴圈，見該
+    // middleware 的說明。
+    Route::view('/account/password', 'account.password')->name('account.password');
 
     // 導師/管理者看即時點名看板，副班長看簡單歡迎頁——見
     // ShowDashboardController，決定畫在哪個 view 的邏輯放在 controller。

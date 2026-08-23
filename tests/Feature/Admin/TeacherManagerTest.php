@@ -3,6 +3,7 @@
 namespace Tests\Feature\Admin;
 
 use App\Livewire\Admin\TeacherManager;
+use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\User;
@@ -136,6 +137,29 @@ class TeacherManagerTest extends TestCase
             ->assertHasNoErrors();
 
         $this->assertSame('新名字', $teacher->fresh()->teacher_name);
+    }
+
+    public function test_admin_can_delete_a_teacher_with_no_homeroom_classes(): void
+    {
+        $teacher = Teacher::factory()->create();
+
+        Livewire::actingAs($this->admin())
+            ->test(TeacherManager::class)
+            ->call('deleteTeacher', $teacher->id);
+
+        $this->assertModelMissing($teacher);
+    }
+
+    public function test_a_teacher_currently_assigned_as_a_homeroom_teacher_cannot_be_deleted(): void
+    {
+        $teacher = Teacher::factory()->create();
+        SchoolClass::factory()->create(['homeroom_teacher_id' => $teacher->id]);
+
+        Livewire::actingAs($this->admin())
+            ->test(TeacherManager::class)
+            ->call('deleteTeacher', $teacher->id);
+
+        $this->assertModelExists($teacher);
     }
 
     public function test_opening_the_create_form_while_editing_closes_the_edit_form(): void

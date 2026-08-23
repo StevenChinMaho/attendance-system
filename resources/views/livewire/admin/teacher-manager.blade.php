@@ -12,6 +12,12 @@
         </div>
     @endif
 
+    @if (session('error'))
+        <div class="alert-error mt-4">
+            {{ session('error') }}
+        </div>
+    @endif
+
     @if ($showCreateForm)
         <form wire:submit="createTeacher" class="surface mt-6 space-y-4 p-6">
             <div>
@@ -91,6 +97,14 @@
                                 <div class="action-group">
                                     <button type="button" wire:click="startEdit({{ $teacher->id }})" class="btn-secondary btn-xs">
                                         編輯
+                                    </button>
+                                    <button
+                                        type="button"
+                                        wire:click="deleteTeacher({{ $teacher->id }})"
+                                        wire:confirm="確定要刪除老師「{{ $teacher->displayName() }}」嗎？此操作無法復原。"
+                                        class="btn-danger-ghost btn-xs"
+                                    >
+                                        刪除
                                     </button>
                                 </div>
                             </td>

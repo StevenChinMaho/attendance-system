@@ -3,7 +3,9 @@
 namespace Tests\Feature\Admin;
 
 use App\Livewire\Admin\SchoolClassManager;
+use App\Models\AttendanceSession;
 use App\Models\SchoolClass;
+use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\User;
 use App\Support\AcademicPeriod;
@@ -233,6 +235,43 @@ class SchoolClassManagerTest extends TestCase
             ->set('newTeacherName', '')
             ->call('quickAddTeacher')
             ->assertHasErrors('newTeacherName');
+    }
+
+    public function test_admin_can_delete_an_empty_class_with_no_attendance_history(): void
+    {
+        $class = SchoolClass::factory()->create();
+
+        Livewire::actingAs($this->admin())
+            ->test(SchoolClassManager::class)
+            ->call('deleteClass', $class->id);
+
+        $this->assertModelMissing($class);
+    }
+
+    public function test_a_class_with_students_cannot_be_deleted(): void
+    {
+        $class = SchoolClass::factory()->create();
+        Student::factory()->for($class, 'schoolClass')->create();
+
+        Livewire::actingAs($this->admin())
+            ->test(SchoolClassManager::class)
+            ->call('deleteClass', $class->id);
+
+        $this->assertModelExists($class);
+    }
+
+    public function test_a_class_with_attendance_sessions_but_no_students_cannot_be_deleted(): void
+    {
+        // 邊界情境：學生後來被移走或本來就沒有學生，但這個班級已經點過
+        // 名，一樣要保留歷史紀錄，不能刪。
+        $class = SchoolClass::factory()->create();
+        AttendanceSession::factory()->for($class, 'schoolClass')->create();
+
+        Livewire::actingAs($this->admin())
+            ->test(SchoolClassManager::class)
+            ->call('deleteClass', $class->id);
+
+        $this->assertModelExists($class);
     }
 
     public function test_the_classes_table_no_longer_offers_a_take_attendance_link(): void

@@ -206,6 +206,27 @@ class SchoolClassManager extends Component
     }
 
     /**
+     * 只有完全沒有學生、也從來沒有點過名的班級才能刪——
+     * students.school_class_id／attendance_sessions.school_class_id 都是
+     * cascadeOnDelete，真的執行下去會連同這個班級的學生名冊、點名紀錄、
+     * 處理情形一起整串刪光，對一個已經在用的班級來說是毀滅性的操作。
+     * 這個限制只用來清掉「建錯的空班級」，不是用來清掉舊學年度的班級
+     * ——舊班級即使已經沒有在點名，學生名冊跟歷史紀錄還是要保留。
+     */
+    public function deleteClass(SchoolClass $schoolClass): void
+    {
+        if ($schoolClass->students()->exists() || $schoolClass->attendanceSessions()->exists()) {
+            session()->flash('error', "班級「{$schoolClass->shortLabel()}」已經有學生或點名紀錄，為避免資料一併被刪除，無法刪除這個班級。");
+
+            return;
+        }
+
+        $schoolClass->delete();
+
+        session()->flash('status', "班級「{$schoolClass->shortLabel()}」已刪除。");
+    }
+
+    /**
      * 學年度／學期一切換，先前分頁選到的頁碼很可能已經超出新篩選結果
      * 的範圍——ScopesToSelectedAcademicPeriod 本身不假設每個用它的元件
      * 都有分頁，所以分頁重置放在這裡而不是共用 trait 裡。

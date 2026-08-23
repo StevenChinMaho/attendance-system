@@ -57,6 +57,13 @@
 
             <x-theme-toggle />
 
+            {{-- 每個帳號都能改自己的密碼，不需要任何權限——不是只有被
+                 強制改密碼（見 App\Http\Middleware\
+                 EnsureUserHasChangedPassword）時才進得來。 --}}
+            <a href="{{ route('account.password') }}" class="{{ $linkClass(request()->routeIs('account.password')) }}">
+                變更密碼
+            </a>
+
             <span class="text-sm text-slate-500 dark:text-slate-400">{{ auth()->user()->name }}</span>
             <form method="POST" action="{{ route('logout') }}">
                 @csrf
