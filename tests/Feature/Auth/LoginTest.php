@@ -20,6 +20,23 @@ class LoginTest extends TestCase
         $this->get('/dashboard')->assertRedirect('/');
     }
 
+    public function test_manually_visiting_slash_login_shows_the_login_page_instead_of_405(): void
+    {
+        // 只有 POST /login 存在的時候，手動在網址列輸入 /login 會命中
+        // 那個路徑但方法不符，得到 405——很多人會直接猜這個網址，見
+        // routes/web.php 額外提供的 GET /login。
+        $this->get('/login')->assertOk()->assertSee('登入');
+    }
+
+    public function test_an_authenticated_user_visiting_slash_login_is_redirected_away(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->get('/login')
+            ->assertRedirect('/dashboard');
+    }
+
     public function test_user_can_login_with_correct_credentials(): void
     {
         $user = User::factory()->create([

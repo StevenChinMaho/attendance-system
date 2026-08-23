@@ -11,6 +11,12 @@ use Illuminate\Support\Facades\Route;
 // 未登入者永遠只會看到登入頁面，不存在任何會外洩資訊的公開路由。
 Route::middleware('guest')->group(function () {
     Route::get('/', [LoginController::class, 'create'])->name('login');
+
+    // 只有 POST /login 存在時，手動在網址列輸入 /login（很多人會這樣
+    // 猜）會命中這個路徑但方法不符，得到 405 而不是登入頁——額外提供
+    // GET /login 顯示同一個登入表單，避免使用者以為系統壞了。/ 仍是
+    // 唯一具名的 login 路由，其他程式碼裡的 route('login') 不受影響。
+    Route::get('/login', [LoginController::class, 'create']);
 });
 
 // POST /login 故意不掛 guest：如果瀏覽器透過「上一頁」或書籤顯示出登入頁
