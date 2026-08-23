@@ -212,8 +212,21 @@
         @apply bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-800/60 dark:text-slate-400;
     }
 
+    /*
+     * 這裡故意用 border-b-slate-300（只設定下邊框顏色），不能寫成
+     * plain 的 border-slate-300——後者編譯出來是 border-color 這個
+     * shorthand，會把該儲存格「上下左右」四個邊框顏色全部設定成
+     * slate-300，蓋過下面 divide-x／divide-slate-200 想要套用在表頭
+     * 直向格線上的顏色（divide-x 那組規則用 :where() 包起來、特異度
+     * 是 0，plain 的 border-slate-300 特異度是 (0,1,0)，永遠贏），
+     * 導致表頭的直向格線實際上全部被畫成 slate-300、而不是原本設計
+     * 想要的、比橫線淺一階的 slate-200——曾經因為這個 bug 手動幫某個
+     * 儲存格補右邊框時誤用了 plain 的 border-slate-200，反而讓那一格
+     * 看起來比其他（其實被 bug 加深成 slate-300 的）直向格線更淡，
+     * 底部邊框也被一併蓋成 slate-200，比兩旁儲存格的底線更淺。
+     */
     .data-table thead th {
-        @apply border-b-2 border-slate-300 dark:border-slate-700;
+        @apply border-b-2 border-b-slate-300 dark:border-b-slate-700;
     }
 
     .data-table thead tr,

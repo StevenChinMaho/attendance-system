@@ -48,11 +48,15 @@
                         同一個 <tr> 裡，divide-x 的 sibling 選擇器完全不會
                         套用到它們之間，導致這條理應延續兩列的直向格線在
                         第二列憑空斷掉。這裡手動幫最後一個「缺席」補上同
-                        色的右邊框，接上第一列在「需留意學生」左邊那條線。
+                        色的右邊框，接上第一列在「需留意學生」左邊那條線
+                        ——用 border-r-slate-200（只設定右邊框顏色）而不是
+                        plain 的 border-slate-200，理由見 app.css 裡
+                        .data-table thead th 那條規則的說明：plain 的
+                        border-{color} 會連這格自己的下邊框顏色也一起蓋掉。
                     --}}
                     @foreach ($periods as $periodValue => $periodLabel)
                         <th>出席</th>
-                        <th @if ($loop->last) class="border-r border-slate-200 dark:border-slate-800" @endif>缺席</th>
+                        <th @if ($loop->last) class="border-r border-r-slate-200 dark:border-r-slate-800" @endif>缺席</th>
                     @endforeach
                 </tr>
             </thead>
