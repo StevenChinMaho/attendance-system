@@ -2,7 +2,7 @@
 
 namespace App\Livewire\Admin;
 
-use App\Livewire\Concerns\RequiresAdminRole;
+use App\Livewire\Concerns\RequiresPermission;
 use App\Livewire\Concerns\ScopesToSelectedAcademicPeriod;
 use App\Models\SchoolClass;
 use App\Models\Teacher;
@@ -13,7 +13,9 @@ use Livewire\WithPagination;
 
 class SchoolClassManager extends Component
 {
-    use RequiresAdminRole, ScopesToSelectedAcademicPeriod, WithPagination;
+    use RequiresPermission, ScopesToSelectedAcademicPeriod, WithPagination;
+
+    protected string $requiredPermission = 'classes.manage';
 
     public string $academicYear = '';
 

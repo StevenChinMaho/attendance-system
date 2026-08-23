@@ -100,9 +100,10 @@ class UserManagerTest extends TestCase
 
     public function test_revoking_admin_role_mid_session_blocks_further_livewire_actions(): void
     {
-        // routes/web.php 的 role:admin middleware 只在整頁載入那一刻檢查
-        // 一次，不會延續到 Livewire 元件之後每一次 wire:click 的互動請求
-        // ——這是 RequiresAdminRole trait 存在的原因，這裡驗證它真的擋得住。
+        // routes/web.php 的 can:users.manage middleware 只在整頁載入那一刻
+        // 檢查一次，不會延續到 Livewire 元件之後每一次 wire:click 的互動
+        // 請求——這是 RequiresPermission trait 存在的原因，這裡驗證它真的
+        // 擋得住。
         $admin = User::factory()->create();
         $admin->assignRole('admin');
 

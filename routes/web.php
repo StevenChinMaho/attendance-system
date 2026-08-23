@@ -43,15 +43,26 @@ Route::middleware(['auth', EnsureAccountIsActive::class])->group(function () {
         ->middleware('can:recordAttendance,schoolClass')
         ->name('attendance.show');
 
-    Route::middleware('role:admin')->group(function () {
-        Route::view('/admin/users', 'admin.users')->name('admin.users');
-        Route::view('/admin/teachers', 'admin.teachers')->name('admin.teachers');
-        Route::view('/admin/classes', 'admin.classes')->name('admin.classes');
+    // 每個 admin 頁面各自掛一個對應的頁面級 permission（見
+    // database/seeders/RolePermissionSeeder.php），不再統一用
+    // role:admin 卡在同一個群組——這樣管理者才能透過 /admin/roles
+    // （App\Livewire\Admin\RoleManager）新增自訂角色，只開放特定幾個
+    // 頁面給特定帳號，而不是「要嘛是 admin 全部都能進、要嘛什麼都不能
+    // 進」。用 Laravel 原生的 can: middleware（底層是
+    // Illuminate\Auth\Middleware\Authorize）而不是 spatie 自帶的
+    // role/permission middleware，是因為前者剛好在 Livewire 的
+    // PersistentMiddleware allowlist 裡，之後每一次 wire:click 都會
+    // 重新檢查一次，不是只在整頁載入那一刻檢查——見
+    // App\Livewire\Concerns\RequiresPermission 的說明。
+    Route::view('/admin/users', 'admin.users')->middleware('can:users.manage')->name('admin.users');
+    Route::view('/admin/teachers', 'admin.teachers')->middleware('can:teachers.manage')->name('admin.teachers');
+    Route::view('/admin/classes', 'admin.classes')->middleware('can:classes.manage')->name('admin.classes');
+    Route::view('/admin/roles', 'admin.roles')->middleware('can:roles.manage')->name('admin.roles');
 
-        // Route::view 不支援隱含路由模型綁定；closure route 又無法被
-        // route:cache 序列化，正式環境跑 optimize 會直接炸掉，所以用
-        // invokable controller 兩邊都顧到。
-        Route::get('/admin/classes/{schoolClass}/students', ShowClassStudentsController::class)
-            ->name('admin.classes.students');
-    });
+    // Route::view 不支援隱含路由模型綁定；closure route 又無法被
+    // route:cache 序列化，正式環境跑 optimize 會直接炸掉，所以用
+    // invokable controller 兩邊都顧到。
+    Route::get('/admin/classes/{schoolClass}/students', ShowClassStudentsController::class)
+        ->middleware('can:students.manage')
+        ->name('admin.classes.students');
 });

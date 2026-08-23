@@ -2,7 +2,7 @@
 
 namespace App\Livewire\Admin;
 
-use App\Livewire\Concerns\RequiresAdminRole;
+use App\Livewire\Concerns\RequiresPermission;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\User;
@@ -12,7 +12,9 @@ use Livewire\Component;
 
 class StudentManager extends Component
 {
-    use RequiresAdminRole;
+    use RequiresPermission;
+
+    protected string $requiredPermission = 'students.manage';
 
     public SchoolClass $schoolClass;
 

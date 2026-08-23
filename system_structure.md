@@ -26,7 +26,7 @@
 依功能相依性排序，後面的階段建立在前面階段的資料表/權限之上：
 
 1. **帳號與登入基礎建設**（已完成）：`users` 表、spatie 角色權限套件、稽核套件、最小登入功能。
-2. **角色權限初始化**（已完成）：`admin`/`homeroom_teacher`/`student_rep` 角色與對應權限的 seeder；管理者後台建立/停用/切換啟用狀態的帳號管理介面。
+2. **角色權限初始化**（已完成）：`admin`/`homeroom_teacher`/`student_rep` 角色與對應權限的 seeder；管理者後台建立/停用/切換啟用狀態的帳號管理介面；`/admin/roles` 頁面級角色管理介面（新增自訂角色、勾選要開放的後台頁面）。
 3. **學年制度骨架**（已完成）：`school_classes`、`students`、`teachers` 的 migration + model + 管理者 CRUD 介面（新增班級、編輯學生資訊、指派導師）。
 4. **點名核心功能**（已完成）：`attendance_sessions`、`attendance_records`，股長/導師的點名操作介面、`SchoolClassPolicy`／`AttendanceRecordPolicy` 的範圍限制（依 `User::ownSchoolClasses()` 判斷「這個班在不在名下清單裡」，支援一帳號帶不只一班）。
 5. **處理情形與稽核**（已完成）：`attendance_follow_ups`，串接 `spatie/laravel-activitylog` 記錄狀態異動歷程。
@@ -69,7 +69,7 @@
 - 帳號（`users`）與業務資料（`students`、`teachers`）分離管理：`students`、`teachers` 各自可透過 nullable 的 `user_id` 選擇性關聯一個帳號，並非每一筆學生/教師資料都需要登入權限（例如一般學生不需要帳號，只有副班長需要；一般任課教師不一定需要帳號，只有導師/管理者需要）。
 - 帳號僅能由管理者於後台建立，不開放自主註冊；`users` 保留 `is_active` 欄位供管理者停用帳號而不需刪除資料。
 - 登入端點有防暴力破解機制：同一組「帳號＋來源 IP」1 分鐘內連續 5 次密碼錯誤就會被暫時鎖住（見 `LoginController::store()` 的 `RateLimiter`），不管輸入的帳號是否真的存在，登入成功會清空計數。key 用「帳號＋IP」而不是只用帳號，避免一個使用者自己打錯密碼幾次就連累到別人也登入不了。
-- 角色與權限透過 `spatie/laravel-permission` 套件管理，預設對應下方「權限階級」三種角色，但角色與細部權限均可由管理者在後台新增/調整，未來甲方需求變動時不需修改程式碼或資料庫結構。
+- 角色與權限透過 `spatie/laravel-permission` 套件管理，預設對應下方「權限階級」三種角色，但角色與細部權限均可由管理者在 `/admin/roles`（`App\Livewire\Admin\RoleManager`）新增/調整，未來甲方需求變動時不需修改程式碼或資料庫結構。權限的粒度是「頁面級」：每個後台頁面（帳號管理、教師管理、班級管理、學生管理、角色管理）各自對應一個獨立權限，管理者可以自由組合成新角色（例如只開放「教師管理」給某個帳號），指派方式跟原本三種內建角色相同（`UserManager` 的角色下拉選單直接讀 `roles` 表，新角色會自動出現）。`admin`／`homeroom_teacher`／`student_rep` 三個角色是系統內建、程式碼多處直接依賴其名稱（例如管理者對所有班級的完整存取權），後台不能刪除，`admin` 的權限清單額外鎖定不能調整，避免管理者自我鎖死。
 
 # 權限階級
 

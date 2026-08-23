@@ -9,12 +9,15 @@ use Spatie\Permission\Models\Role;
 class RolePermissionSeeder extends Seeder
 {
     /**
-     * 初始的角色與權限。之後甲方若要調整權限階級，直接在後台調整
-     * roles/permissions 資料即可，不需要改這個 seeder 或程式碼——
-     * 這裡只負責建立「起始」的三種角色。
+     * 初始的角色與權限。之後甲方若要調整權限階級，不需要改這個 seeder
+     * 或程式碼——直接用 /admin/roles（App\Livewire\Admin\RoleManager）
+     * 新增角色、勾選要開放的頁面權限即可，這個 seeder 只負責建立「起始」
+     * 的三種角色與所有頁面對應的權限清單。
      *
-     * 部分權限（attendance.* 開頭）對應的功能還沒實作，先建立起來是為了
-     * 讓角色結構一開始就正確，之後點名功能上線時不需要再回頭調整角色。
+     * 每一個 admin.* 開頭的權限對應一整個後台頁面（見 routes/web.php
+     * 掛在各 admin 路由上的 can:xxx middleware），是刻意做成「頁面級」
+     * 而不是頁面內單一動作級的granularity——例如「教師管理」頁面只有
+     * 開/關，沒有再細分「只能看不能改」。
      */
     public function run(): void
     {
@@ -22,9 +25,11 @@ class RolePermissionSeeder extends Seeder
             'attendance.record',        // 送出/查看自己班級的點名（副班長、導師、管理者）
             'attendance.follow_up.manage', // 建立/編輯「處理情形」（導師、管理者）
             'attendance.dashboard.view', // 查看全校即時點名看板（導師、管理者，副班長不用）
-            'students.manage',          // 編輯學生資訊、所屬班級（管理者）
-            'classes.manage',           // 新增/修改班級（管理者）
-            'users.manage',             // 建立帳號、指派角色（管理者）
+            'users.manage',             // /admin/users：建立帳號、指派角色
+            'teachers.manage',          // /admin/teachers：新增/編輯教師資料
+            'classes.manage',           // /admin/classes：新增/修改班級
+            'students.manage',          // /admin/classes/{id}/students：編輯學生資訊
+            'roles.manage',             // /admin/roles：新增角色、調整角色的權限
         ];
 
         foreach ($permissions as $permission) {

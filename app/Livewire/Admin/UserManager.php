@@ -2,7 +2,7 @@
 
 namespace App\Livewire\Admin;
 
-use App\Livewire\Concerns\RequiresAdminRole;
+use App\Livewire\Concerns\RequiresPermission;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Attributes\Validate;
@@ -12,7 +12,9 @@ use Spatie\Permission\Models\Role;
 
 class UserManager extends Component
 {
-    use RequiresAdminRole, WithPagination;
+    use RequiresPermission, WithPagination;
+
+    protected string $requiredPermission = 'users.manage';
 
     #[Validate('required|string|max:255')]
     public string $name = '';
