@@ -121,9 +121,6 @@
                                     <a href="{{ route('admin.classes.students', $class) }}" class="btn-secondary btn-xs">
                                         管理學生
                                     </a>
-                                    <a href="{{ route('attendance.show', $class) }}" class="btn-secondary btn-xs">
-                                        點名
-                                    </a>
                                     <button type="button" wire:click="startEdit({{ $class->id }})" class="btn-secondary btn-xs">
                                         編輯
                                     </button>

@@ -11,34 +11,11 @@
                 國中點名系統
             </a>
 
-            @hasanyrole('student_rep|homeroom_teacher')
-                @php
-                    // 只列出「目前選取」學年度／學期裡的班級——這個選單是
-                    // 「我現在要點哪一班」的快捷方式，不是這個帳號歷史上
-                    // 管過的所有班級（那些仍可透過網址直接存取，見
-                    // SchoolClassPolicy），所以要跟著 nav bar 自己的學年度
-                    // 篩選走，不然選單裡會混進已經凍結的舊學期班級。
-                    $ownClasses = auth()->user()->ownSchoolClasses()
-                        ->where('academic_year', \App\Support\AcademicPeriod::selectedYear())
-                        ->where('semester', \App\Support\AcademicPeriod::selectedSemester());
-                @endphp
-                @if ($ownClasses->count() > 1)
-                    <select
-                        onchange="if (this.value) { window.location.href = this.value; }"
-                        class="field-input mt-0 w-auto py-1"
-                    >
-                        <option value="">點名（選擇班級）</option>
-                        @foreach ($ownClasses as $ownClass)
-                            <option value="{{ route('attendance.show', $ownClass) }}">
-                                {{ $ownClass->shortLabel() }}
-                            </option>
-                        @endforeach
-                    </select>
-                @else
-                    <a href="{{ route('attendance.mine') }}" class="{{ $linkClass(request()->routeIs('attendance.*')) }}">
-                        點名
-                    </a>
-                @endif
+            {{-- 副班長、導師、管理者共用同一套「點名」快捷入口，管理者
+                 不再需要另外從「班級管理」列表點進去——見
+                 App\Livewire\AttendanceQuickLink。 --}}
+            @hasanyrole('student_rep|homeroom_teacher|admin')
+                <livewire:attendance-quick-link />
             @endhasanyrole
 
             @role('admin')

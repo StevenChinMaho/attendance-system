@@ -145,4 +145,16 @@ class SchoolClassManagerTest extends TestCase
 
         $this->assertSame($teacher->id, $class->fresh()->homeroom_teacher_id);
     }
+
+    public function test_the_classes_table_no_longer_offers_a_take_attendance_link(): void
+    {
+        // 點名入口統一收斂到 nav bar 的 AttendanceQuickLink，管理者不再
+        // 需要（也不該）從班級管理列表直接點進點名頁——見
+        // resources/views/components/nav-bar.blade.php。
+        $class = SchoolClass::factory()->create();
+
+        Livewire::actingAs($this->admin())
+            ->test(SchoolClassManager::class)
+            ->assertDontSee(route('attendance.show', $class), false);
+    }
 }
