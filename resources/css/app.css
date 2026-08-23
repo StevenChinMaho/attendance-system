@@ -125,20 +125,6 @@
         @apply mt-1 text-xs text-slate-500 dark:text-slate-400;
     }
 
-    /*
-     * 瀏覽器原生 checkbox 沒有額外樣式時，邊框太淡、勾選後的打勾顏色
-     * 也是瀏覽器預設值——在深色主題下邊框幾乎融進背景，勾了跟沒勾很
-     * 難分辨（見身分管理頁面的權限勾選矩陣）。accent-color 直接控制
-     * 原生打勾符號＋勾選後的填色，不需要額外套件（沒有裝
-     * @tailwindcss/forms）就能讓勾選狀態一眼可辨；邊框也加深、加粗，
-     * 讓未勾選的方框本身在深色背景下也看得見。disabled:opacity 讓鎖住
-     * 不能改的權限（系統內建身分）看起來明顯是不可互動的，而不是又跟
-     * 「沒勾到」搞混。
-     */
-    .field-checkbox {
-        @apply h-4 w-4 rounded border-2 border-slate-400 accent-indigo-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-400;
-    }
-
     /* 徽章／狀態標籤 */
     .badge-success {
         @apply badge bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400;

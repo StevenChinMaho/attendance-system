@@ -36,7 +36,7 @@
                                 type="checkbox"
                                 wire:model="selectedPermissions"
                                 value="{{ $permission->name }}"
-                                class="field-checkbox"
+                                class="rounded border-slate-300 dark:border-slate-600"
                             >
                             {{ $permissionLabels[$permission->name] ?? $permission->name }}
                         </label>
@@ -87,7 +87,7 @@
                                     @else
                                         wire:click="togglePermission({{ $role->id }}, '{{ $permission->name }}')"
                                     @endif
-                                    class="field-checkbox"
+                                    class="rounded border-slate-300 dark:border-slate-600"
                                 >
                             </td>
                         @endforeach
