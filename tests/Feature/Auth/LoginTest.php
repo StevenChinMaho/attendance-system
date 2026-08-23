@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Tests\TestCase;
 
 class LoginTest extends TestCase
@@ -66,6 +67,85 @@ class LoginTest extends TestCase
         ])->assertSessionHasErrors('username');
 
         $this->assertGuest();
+    }
+
+    public function test_repeated_failed_attempts_get_rate_limited_regardless_of_whether_the_account_exists(): void
+    {
+        // 沒有這一層，攻擊者可以無限次對著同一個帳號猜密碼（甚至對著
+        // 不存在的帳號名稱枚舉）直到猜中或試出哪些帳號存在為止。
+        User::factory()->create([
+            'username' => 'teststudent',
+            'password' => bcrypt('correct-password'),
+        ]);
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->post('/login', [
+                'username' => 'teststudent',
+                'password' => 'wrong-password',
+            ])->assertSessionHasErrors('username');
+        }
+
+        // 第 6 次即使密碼這次是對的，也應該先被擋在「嘗試次數過多」，
+        // 不會因為密碼正確就放行。
+        $response = $this->post('/login', [
+            'username' => 'teststudent',
+            'password' => 'correct-password',
+        ]);
+
+        $response->assertSessionHasErrors('username');
+        $this->assertStringContainsString('嘗試次數過多', session('errors')->first('username'));
+        $this->assertGuest();
+    }
+
+    public function test_rate_limit_is_scoped_per_account_not_shared_across_every_login_attempt(): void
+    {
+        // key 是「帳號＋IP」——某個帳號被鎖住，不該連累到別的帳號也
+        // 登入不了（不然一次針對某帳號的攻擊就能順便癱瘓其他人登入）。
+        $lockedOut = User::factory()->create(['username' => 'locked-out']);
+        $unaffected = User::factory()->create([
+            'username' => 'unaffected',
+            'password' => bcrypt('correct-password'),
+        ]);
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->post('/login', ['username' => $lockedOut->username, 'password' => 'wrong-password']);
+        }
+
+        $this->post('/login', [
+            'username' => 'unaffected',
+            'password' => 'correct-password',
+        ])->assertRedirect(route('dashboard'));
+
+        $this->assertAuthenticatedAs($unaffected);
+    }
+
+    public function test_a_successful_login_clears_the_rate_limit(): void
+    {
+        $user = User::factory()->create([
+            'username' => 'teststudent',
+            'password' => bcrypt('correct-password'),
+        ]);
+
+        // 錯個幾次但還沒到鎖住的門檻。
+        for ($i = 0; $i < 3; $i++) {
+            $this->post('/login', ['username' => 'teststudent', 'password' => 'wrong-password']);
+        }
+
+        $this->post('/login', [
+            'username' => 'teststudent',
+            'password' => 'correct-password',
+        ])->assertRedirect(route('dashboard'));
+
+        Auth::logout();
+
+        // 登入成功後計數器應該歸零，不會因為登入前那幾次失敗，之後正常
+        // 輸對密碼卻莫名其妙被鎖住。
+        $this->post('/login', [
+            'username' => 'teststudent',
+            'password' => 'correct-password',
+        ])->assertRedirect(route('dashboard'));
+
+        $this->assertAuthenticatedAs($user);
     }
 
     public function test_disabled_account_cannot_login_even_with_correct_password(): void
