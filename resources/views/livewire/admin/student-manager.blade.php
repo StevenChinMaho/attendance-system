@@ -3,7 +3,7 @@
 
     <div class="mt-2 flex items-center justify-between">
         <h1 class="page-title">{{ $schoolClass->shortLabel() }} 學生管理</h1>
-        <button type="button" wire:click="$toggle('showCreateForm')" class="btn-primary">
+        <button type="button" wire:click="toggleCreateForm" class="btn-primary">
             {{ $showCreateForm ? '取消' : '新增學生' }}
         </button>
     </div>

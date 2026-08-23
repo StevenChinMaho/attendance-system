@@ -6,7 +6,7 @@
                 顯示範圍：{{ \App\Support\AcademicPeriod::label($selectedAcademicYear, $selectedSemester) }}，要看別的學年度請用上方導覽列的切換選單。
             </p>
         </div>
-        <button type="button" wire:click="$toggle('showCreateForm')" class="btn-primary">
+        <button type="button" wire:click="toggleCreateForm" class="btn-primary">
             {{ $showCreateForm ? '取消' : '新增班級' }}
         </button>
     </div>

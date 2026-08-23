@@ -146,6 +146,47 @@ class SchoolClassManagerTest extends TestCase
         $this->assertSame($teacher->id, $class->fresh()->homeroom_teacher_id);
     }
 
+    public function test_opening_the_create_form_while_editing_closes_the_edit_form(): void
+    {
+        // 新增表單跟編輯表單共用同一組欄位屬性（$grade/$classNumber/
+        // $homeroomTeacherId）；兩個表單以前可以同時開著，輸入內容看
+        // 起來會互相同步，實際上是同一個屬性被兩邊的輸入框綁定。
+        $class = SchoolClass::factory()->create(['grade' => 1, 'class_number' => '9']);
+
+        Livewire::actingAs($this->admin())
+            ->test(SchoolClassManager::class)
+            ->call('startEdit', $class->id)
+            ->assertSet('editingClassId', $class->id)
+            ->call('toggleCreateForm')
+            ->assertSet('showCreateForm', true)
+            ->assertSet('editingClassId', null)
+            ->assertSet('classNumber', '');
+    }
+
+    public function test_creating_a_class_while_another_is_being_edited_does_not_duplicate_its_data(): void
+    {
+        // 修正前：編輯表單開著時點「新增班級」，新增表單會沿用正在編輯
+        // 那個班級的年級／代號，同學年度學期底下撞到 unique 限制噴 500。
+        AcademicPeriod::setSelected(113, 1);
+        $existing = SchoolClass::factory()->create([
+            'academic_year' => 113, 'semester' => 1, 'grade' => 1, 'class_number' => '9',
+        ]);
+
+        Livewire::actingAs($this->admin())
+            ->test(SchoolClassManager::class)
+            ->call('startEdit', $existing->id)
+            ->call('toggleCreateForm')
+            ->set('grade', '2')
+            ->set('classNumber', '3')
+            ->call('createClass')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('school_classes', [
+            'academic_year' => 113, 'semester' => 1, 'grade' => 2, 'class_number' => '3',
+        ]);
+        $this->assertSame('9', $existing->fresh()->class_number);
+    }
+
     public function test_the_classes_table_no_longer_offers_a_take_attendance_link(): void
     {
         // 點名入口統一收斂到 nav bar 的 AttendanceQuickLink，管理者不再

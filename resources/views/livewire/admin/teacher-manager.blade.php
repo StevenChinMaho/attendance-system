@@ -1,7 +1,7 @@
 <div class="mx-auto max-w-4xl px-4 py-10">
     <div class="flex items-center justify-between">
         <h1 class="page-title">教師管理</h1>
-        <button type="button" wire:click="$toggle('showCreateForm')" class="btn-primary">
+        <button type="button" wire:click="toggleCreateForm" class="btn-primary">
             {{ $showCreateForm ? '取消' : '新增老師' }}
         </button>
     </div>

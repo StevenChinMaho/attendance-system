@@ -77,6 +77,26 @@ class SchoolClassManager extends Component
         ];
     }
 
+    /**
+     * 新增表單跟編輯表單共用同一組欄位屬性（$grade/$classNumber/
+     * $homeroomTeacherId）——如果兩個表單同時顯示，畫面上會看起來像
+     * 互相同步（其實就是同一個屬性），送出新增時甚至可能帶著正在編輯
+     * 那個班級的年級／代號一起送出去，撞到同學年度學期的 unique 限制
+     * 直接噴 500。這裡確保兩者互斥：開新增表單前一定先把編輯狀態清
+     * 乾淨。
+     */
+    public function toggleCreateForm(): void
+    {
+        if ($this->showCreateForm) {
+            $this->showCreateForm = false;
+
+            return;
+        }
+
+        $this->cancelEdit();
+        $this->showCreateForm = true;
+    }
+
     public function createClass(): void
     {
         $this->validate($this->createRules());
@@ -96,6 +116,10 @@ class SchoolClassManager extends Component
 
     public function startEdit(SchoolClass $schoolClass): void
     {
+        // 理由跟 toggleCreateForm() 一樣：新增表單如果還開著，會跟編輯
+        // 表單同時顯示、共用同一組欄位屬性。
+        $this->showCreateForm = false;
+
         $this->editingClassId = $schoolClass->id;
         $this->academicYear = (string) $schoolClass->academic_year;
         $this->semester = (string) $schoolClass->semester;

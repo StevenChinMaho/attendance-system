@@ -167,4 +167,48 @@ class StudentManagerTest extends TestCase
             ->call('createStudent')
             ->assertHasErrors('userId');
     }
+
+    public function test_opening_the_create_form_while_editing_closes_the_edit_form(): void
+    {
+        // 新增表單跟編輯表單共用同一組欄位屬性（$studentNumber/
+        // $seatNumber/$name/$gender/$userId）；兩個表單以前可以同時開
+        // 著，輸入內容看起來會互相同步，實際上是同一個屬性被兩邊的
+        // 輸入框綁定。
+        $class = SchoolClass::factory()->create();
+        $student = Student::factory()->for($class, 'schoolClass')->create(['student_number' => '10001']);
+
+        Livewire::actingAs($this->admin())
+            ->test(StudentManager::class, ['schoolClass' => $class])
+            ->call('startEdit', $student->id)
+            ->assertSet('editingStudentId', $student->id)
+            ->call('toggleCreateForm')
+            ->assertSet('showCreateForm', true)
+            ->assertSet('editingStudentId', null)
+            ->assertSet('studentNumber', '');
+    }
+
+    public function test_creating_a_student_while_another_is_being_edited_does_not_duplicate_its_unique_fields(): void
+    {
+        // 使用者實測回報的 500 錯誤：編輯表單開著時點「新增學生」，新增
+        // 表單會沿用正在編輯那位學生的學號／座號，同一班內撞到 unique
+        // 限制直接噴 500，而不是正常顯示驗證錯誤。
+        $class = SchoolClass::factory()->create();
+        $existing = Student::factory()->for($class, 'schoolClass')->create([
+            'student_number' => '10001', 'seat_number' => '1', 'name' => '正在編輯的學生',
+        ]);
+
+        Livewire::actingAs($this->admin())
+            ->test(StudentManager::class, ['schoolClass' => $class])
+            ->call('startEdit', $existing->id)
+            ->call('toggleCreateForm')
+            ->set('studentNumber', '20002')
+            ->set('seatNumber', '2')
+            ->set('name', '全新的學生')
+            ->set('gender', '男')
+            ->call('createStudent')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('students', ['student_number' => '20002', 'name' => '全新的學生']);
+        $this->assertSame('10001', $existing->fresh()->student_number);
+    }
 }

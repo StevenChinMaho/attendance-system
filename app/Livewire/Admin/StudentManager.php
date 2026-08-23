@@ -67,6 +67,26 @@ class StudentManager extends Component
         ];
     }
 
+    /**
+     * 新增表單跟編輯表單共用同一組欄位屬性（$studentNumber/$seatNumber/
+     * $name/$gender/$userId）——如果兩個表單同時顯示，畫面上會看起來
+     * 像互相同步（其實就是同一個屬性），送出新增時甚至可能帶著正在
+     * 編輯那筆學生的學號／座號一起送出去，撞到這個班級裡的 unique
+     * 限制直接噴 500。這裡確保兩者互斥：開新增表單前一定先把編輯狀態
+     * 清乾淨。
+     */
+    public function toggleCreateForm(): void
+    {
+        if ($this->showCreateForm) {
+            $this->showCreateForm = false;
+
+            return;
+        }
+
+        $this->cancelEdit();
+        $this->showCreateForm = true;
+    }
+
     public function createStudent(): void
     {
         $this->validate();
@@ -86,6 +106,10 @@ class StudentManager extends Component
 
     public function startEdit(Student $student): void
     {
+        // 理由跟 toggleCreateForm() 一樣：新增表單如果還開著，會跟編輯
+        // 表單同時顯示、共用同一組欄位屬性。
+        $this->showCreateForm = false;
+
         $this->editingStudentId = $student->id;
         $this->studentNumber = $student->student_number;
         $this->seatNumber = $student->seat_number;

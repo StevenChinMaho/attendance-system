@@ -108,4 +108,40 @@ class TeacherManagerTest extends TestCase
 
         $this->assertSame('新名字', $teacher->fresh()->teacher_name);
     }
+
+    public function test_opening_the_create_form_while_editing_closes_the_edit_form(): void
+    {
+        // 新增表單跟編輯表單共用同一組欄位屬性（$teacherName/$userId）；
+        // 兩個表單以前可以同時開著，輸入內容看起來會互相同步，實際上是
+        // 同一個屬性被兩邊的輸入框綁定。
+        $teacher = Teacher::factory()->create(['teacher_name' => '正在編輯的老師']);
+
+        $component = Livewire::actingAs($this->admin())
+            ->test(TeacherManager::class)
+            ->call('startEdit', $teacher->id)
+            ->assertSet('editingTeacherId', $teacher->id);
+
+        $component->call('toggleCreateForm')
+            ->assertSet('showCreateForm', true)
+            ->assertSet('editingTeacherId', null)
+            ->assertSet('teacherName', '');
+    }
+
+    public function test_creating_a_teacher_while_another_is_being_edited_does_not_duplicate_its_data(): void
+    {
+        // 修正前：編輯表單開著時點「新增老師」，新增表單會沿用正在編輯
+        // 那筆老師的姓名／連結帳號，因為兩個表單共用同一組屬性。
+        $existing = Teacher::factory()->create(['teacher_name' => '正在編輯的老師']);
+
+        Livewire::actingAs($this->admin())
+            ->test(TeacherManager::class)
+            ->call('startEdit', $existing->id)
+            ->call('toggleCreateForm')
+            ->set('teacherName', '全新的老師')
+            ->call('createTeacher')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('teachers', ['teacher_name' => '全新的老師']);
+        $this->assertSame('正在編輯的老師', $existing->fresh()->teacher_name);
+    }
 }

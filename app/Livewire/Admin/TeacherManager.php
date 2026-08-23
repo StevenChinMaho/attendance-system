@@ -32,6 +32,25 @@ class TeacherManager extends Component
         ];
     }
 
+    /**
+     * 新增表單跟編輯表單共用同一組欄位屬性（$teacherName/$userId）——
+     * 如果兩個表單同時顯示，畫面上會看起來像互相同步（其實就是同一個
+     * 屬性），送出新增時甚至可能帶著正在編輯那筆資料的值一起送出去，
+     * 撞到 unique 限制（見 StudentManager 同樣的問題）。這裡確保兩者
+     * 互斥：開新增表單前一定先把編輯狀態清乾淨。
+     */
+    public function toggleCreateForm(): void
+    {
+        if ($this->showCreateForm) {
+            $this->showCreateForm = false;
+
+            return;
+        }
+
+        $this->cancelEdit();
+        $this->showCreateForm = true;
+    }
+
     public function createTeacher(): void
     {
         $this->validate();
@@ -48,6 +67,10 @@ class TeacherManager extends Component
 
     public function startEdit(Teacher $teacher): void
     {
+        // 理由跟 toggleCreateForm() 一樣：新增表單如果還開著，會跟編輯
+        // 表單同時顯示、共用同一組欄位屬性。
+        $this->showCreateForm = false;
+
         $this->editingTeacherId = $teacher->id;
         $this->teacherName = $teacher->teacher_name;
         $this->userId = $teacher->user_id;
