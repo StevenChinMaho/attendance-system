@@ -41,9 +41,18 @@
                     <th rowspan="2">需留意學生</th>
                 </tr>
                 <tr>
+                    {{--
+                        divide-x（.data-table thead tr）只在同一列的相鄰
+                        儲存格之間畫線，但這一列最後一格「缺席」右邊緊接
+                        的是上一列的 rowspan="2"「需留意學生」——兩者不在
+                        同一個 <tr> 裡，divide-x 的 sibling 選擇器完全不會
+                        套用到它們之間，導致這條理應延續兩列的直向格線在
+                        第二列憑空斷掉。這裡手動幫最後一個「缺席」補上同
+                        色的右邊框，接上第一列在「需留意學生」左邊那條線。
+                    --}}
                     @foreach ($periods as $periodValue => $periodLabel)
                         <th>出席</th>
-                        <th>缺席</th>
+                        <th @if ($loop->last) class="border-r border-slate-200 dark:border-slate-800" @endif>缺席</th>
                     @endforeach
                 </tr>
             </thead>
