@@ -125,6 +125,42 @@
         @apply mt-1 text-xs text-slate-500 dark:text-slate-400;
     }
 
+    /*
+     * 原生 checkbox 被設成 disabled 時，不管 accent-color 設定成什麼
+     * 顏色，瀏覽器自己都會把整個方框（含打勾符號）套一層降低對比的
+     * 「停用樣式」，勾了跟沒勾看起來幾乎一樣灰——這正是最初「身分管理
+     * 頁面裡，內建身分的權限勾了也看不出來」那個問題的根本原因，光靠
+     * accent-color 治標不治本。這裡改用 appearance-none 完全自己畫
+     * 方框、邊框、打勾符號，不倚賴瀏覽器原生外觀，disabled 狀態的顏色
+     * 才能完全照自己訂的樣式走，不會被瀏覽器內建的「停用就統一變灰」
+     * 規則蓋掉——勾選/未勾選在 disabled 底下用兩種不同深淺的灰階
+     * 區分，一眼就看得出差異，不需要靠鮮豔色也能辨識。
+     */
+    .field-checkbox {
+        @apply relative h-4 w-4 shrink-0 cursor-pointer appearance-none rounded border-2 border-slate-400 bg-white transition-colors dark:border-slate-500 dark:bg-slate-700;
+    }
+
+    .field-checkbox:checked {
+        @apply border-indigo-500 bg-indigo-500 dark:border-indigo-400 dark:bg-indigo-400;
+    }
+
+    .field-checkbox:checked::after {
+        content: '';
+        @apply absolute inset-0 m-auto block h-2 w-1 rotate-45 border-r-2 border-b-2 border-white;
+    }
+
+    .field-checkbox:disabled {
+        @apply cursor-not-allowed;
+    }
+
+    .field-checkbox:disabled:not(:checked) {
+        @apply border-slate-300 bg-slate-100 dark:border-slate-600 dark:bg-slate-800;
+    }
+
+    .field-checkbox:disabled:checked {
+        @apply border-slate-400 bg-slate-400 dark:border-slate-500 dark:bg-slate-500;
+    }
+
     /* 徽章／狀態標籤 */
     .badge-success {
         @apply badge bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400;
