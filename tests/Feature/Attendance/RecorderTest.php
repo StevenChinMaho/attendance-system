@@ -15,6 +15,7 @@ use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class RecorderTest extends TestCase
@@ -92,6 +93,28 @@ class RecorderTest extends TestCase
         $admin->assignRole('admin');
 
         $this->actingAs($admin)
+            ->get("/attendance/{$class->id}")
+            ->assertOk();
+    }
+
+    public function test_a_custom_role_with_classes_manage_permission_can_view_any_classes_attendance_page(): void
+    {
+        // 之前回報的問題：自訂身分即使被賦予了跟 admin 一樣的權限組合，
+        // 只要沒有被指派到任何一個班（沒有連結 Teacher/Student，
+        // ownSchoolClasses() 必定是空集合），就完全點不了名——因為
+        // SchoolClassPolicy::recordAttendance() 以前檢查的是寫死的
+        // hasRole('admin')，不是實際的權限。這裡驗證改成檢查
+        // can('classes.manage') 之後，自訂身分也能跟 admin 一樣不受
+        // ownSchoolClasses() 限制。
+        $class = SchoolClass::factory()->create();
+
+        $role = Role::create(['name' => 'exam_supervisor', 'guard_name' => 'web']);
+        $role->syncPermissions(['attendance.record', 'classes.manage']);
+
+        $user = User::factory()->create();
+        $user->assignRole('exam_supervisor');
+
+        $this->actingAs($user)
             ->get("/attendance/{$class->id}")
             ->assertOk();
     }

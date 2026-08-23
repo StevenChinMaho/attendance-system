@@ -117,21 +117,56 @@ class StudentManagerTest extends TestCase
 
     public function test_admin_can_link_a_student_rep_account_to_a_student(): void
     {
+        // 連結帳號時姓名不需要（也不應該）手動打，直接沿用帳號本身的
+        // users.name——見 Student::resolveName() 的說明，跟教師管理
+        // 同一套處理方式。
         $class = SchoolClass::factory()->create();
-        $account = User::factory()->create();
+        $account = User::factory()->create(['name' => '副班長']);
         $account->assignRole('student_rep');
 
         Livewire::actingAs($this->admin())
             ->test(StudentManager::class, ['schoolClass' => $class])
             ->set('studentNumber', '10001')
             ->set('seatNumber', '1')
-            ->set('name', '副班長')
             ->set('gender', '男')
             ->set('userId', $account->id)
             ->call('createStudent')
             ->assertHasNoErrors();
 
         $this->assertDatabaseHas('students', ['name' => '副班長', 'user_id' => $account->id]);
+    }
+
+    public function test_a_manually_typed_name_is_ignored_when_an_account_is_linked_to_a_student(): void
+    {
+        $class = SchoolClass::factory()->create();
+        $account = User::factory()->create(['name' => '真正的姓名']);
+
+        Livewire::actingAs($this->admin())
+            ->test(StudentManager::class, ['schoolClass' => $class])
+            ->set('studentNumber', '10001')
+            ->set('seatNumber', '1')
+            ->set('name', '不應該用到這個名字')
+            ->set('gender', '男')
+            ->set('userId', $account->id)
+            ->call('createStudent')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('students', ['name' => '真正的姓名']);
+        $this->assertDatabaseMissing('students', ['name' => '不應該用到這個名字']);
+    }
+
+    public function test_name_is_required_when_no_account_is_linked_to_a_student(): void
+    {
+        $class = SchoolClass::factory()->create();
+
+        Livewire::actingAs($this->admin())
+            ->test(StudentManager::class, ['schoolClass' => $class])
+            ->set('studentNumber', '10001')
+            ->set('seatNumber', '1')
+            ->set('name', '')
+            ->set('gender', '男')
+            ->call('createStudent')
+            ->assertHasErrors('name');
     }
 
     public function test_linking_an_account_already_used_by_a_teacher_fails_validation(): void

@@ -14,6 +14,7 @@ use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class FollowUpManagerTest extends TestCase
@@ -70,6 +71,31 @@ class FollowUpManagerTest extends TestCase
         $admin->assignRole('admin');
 
         Livewire::actingAs($admin)
+            ->test(FollowUpManager::class, ['record' => $record])
+            ->set('content', '9:19已到')
+            ->call('addFollowUp')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('attendance_follow_ups', ['content' => '9:19已到']);
+    }
+
+    public function test_a_custom_role_with_classes_manage_permission_can_add_a_follow_up_to_any_class(): void
+    {
+        // 跟 RecorderTest 那個回歸測試同一個問題：自訂身分即使被賦予
+        // attendance.follow_up.manage，只要沒有連結 Teacher/Student、
+        // ownSchoolClasses() 是空集合，以前就完全不能管理任何班級的
+        // 處理情形——AttendanceRecordPolicy::manageFollowUp() 改成檢查
+        // can('classes.manage') 之後才會跟 admin 一樣不受此限制。
+        $class = SchoolClass::factory()->create();
+        $record = $this->absentRecordFor($class);
+
+        $role = Role::create(['name' => 'exam_supervisor', 'guard_name' => 'web']);
+        $role->syncPermissions(['attendance.follow_up.manage', 'classes.manage']);
+
+        $user = User::factory()->create();
+        $user->assignRole('exam_supervisor');
+
+        Livewire::actingAs($user)
             ->test(FollowUpManager::class, ['record' => $record])
             ->set('content', '9:19已到')
             ->call('addFollowUp')

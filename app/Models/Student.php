@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasLinkableAccountName;
 use App\Models\Concerns\HasNaturalStringSort;
 use Database\Factories\StudentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Student extends Model
 {
     /** @use HasFactory<StudentFactory> */
-    use HasFactory, HasNaturalStringSort;
+    use HasFactory, HasLinkableAccountName, HasNaturalStringSort;
 
     public function schoolClass(): BelongsTo
     {
@@ -33,6 +34,17 @@ class Student extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * resolveName()/displayName() 的行為說明見
+     * App\Models\Concerns\HasLinkableAccountName——副班長連結帳號後，
+     * 姓名一律沿用該帳號的 users.name，不用在學生管理再手動打一次，跟
+     * Teacher 的處理方式一致。
+     */
+    protected static function manualNameColumn(): string
+    {
+        return 'name';
     }
 
     public function scopeOrderBySeatNumber(Builder $query): Builder

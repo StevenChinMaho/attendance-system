@@ -37,6 +37,12 @@ class StudentManager extends Component
         $this->schoolClass = $schoolClass;
     }
 
+    /**
+     * 有連結帳號時姓名不是必填——會直接沿用帳號的姓名（見
+     * Student::resolveName()，跟 TeacherManager 同一套處理方式），這裡
+     * 的 name 值根本不會被用到。只有沒連結帳號的學生才需要真的驗證有
+     * 沒有打姓名。
+     */
     protected function rules(): array
     {
         return [
@@ -52,7 +58,7 @@ class StudentManager extends Component
                     ->where('school_class_id', $this->schoolClass->id)
                     ->ignore($this->editingStudentId),
             ],
-            'name' => ['required', 'string', 'max:255'],
+            'name' => [$this->userId ? 'nullable' : 'required', 'string', 'max:255'],
             'gender' => ['required', 'in:男,女'],
             'userId' => [
                 'nullable', 'exists:users,id',
@@ -96,7 +102,7 @@ class StudentManager extends Component
         $student = $this->schoolClass->students()->create([
             'student_number' => $this->studentNumber,
             'seat_number' => $this->seatNumber,
-            'name' => $this->name,
+            'name' => Student::resolveName($this->userId, $this->name),
             'gender' => $this->gender,
             'user_id' => $this->userId,
         ]);
@@ -128,7 +134,7 @@ class StudentManager extends Component
         $student->update([
             'student_number' => $this->studentNumber,
             'seat_number' => $this->seatNumber,
-            'name' => $this->name,
+            'name' => Student::resolveName($this->userId, $this->name),
             'gender' => $this->gender,
             'user_id' => $this->userId,
         ]);

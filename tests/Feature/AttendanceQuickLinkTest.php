@@ -9,6 +9,7 @@ use App\Support\AcademicPeriod;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class AttendanceQuickLinkTest extends TestCase
@@ -34,6 +35,27 @@ class AttendanceQuickLinkTest extends TestCase
         $admin->assignRole('admin');
 
         Livewire::actingAs($admin)
+            ->test(AttendanceQuickLink::class)
+            ->assertSee($classA->shortLabel())
+            ->assertSee($classB->shortLabel());
+    }
+
+    public function test_a_custom_role_with_classes_manage_permission_sees_every_class_like_admin_does(): void
+    {
+        // 同一個回歸測試主題（見 RecorderTest/FollowUpManagerTest）：
+        // 自訂身分沒有連結 Teacher/Student，ownSchoolClasses() 必定是
+        // 空集合，以前只認 hasRole('admin') 的話，這個選單會完全看不到
+        // 任何班級可選，即使這個身分被賦予了 classes.manage。
+        $classA = SchoolClass::factory()->create(['grade' => 1, 'class_number' => '1']);
+        $classB = SchoolClass::factory()->create(['grade' => 2, 'class_number' => '2']);
+
+        $role = Role::create(['name' => 'exam_supervisor', 'guard_name' => 'web']);
+        $role->syncPermissions(['attendance.record', 'classes.manage']);
+
+        $user = User::factory()->create();
+        $user->assignRole('exam_supervisor');
+
+        Livewire::actingAs($user)
             ->test(AttendanceQuickLink::class)
             ->assertSee($classA->shortLabel())
             ->assertSee($classB->shortLabel());

@@ -53,7 +53,7 @@ class StatusBoard extends Component
         $classes = SchoolClass::query()
             ->where('academic_year', $this->selectedAcademicYear)
             ->where('semester', $this->selectedSemester)
-            ->with(['students', 'attendanceSessions' => function ($query) {
+            ->with(['students.user', 'attendanceSessions' => function ($query) {
                 // 這一天三個時段的 session 一次撈出來（不再只篩單一
                 // 時段），summarize() 自己依時段分組。
                 $query->where('date', $this->date)->with(['records.followUps']);
@@ -89,7 +89,7 @@ class StatusBoard extends Component
 
             foreach ($exceptionRecords as $record) {
                 $exceptions->push([
-                    'name' => $class->students->firstWhere('id', $record->student_id)?->name ?? '（學生資料不存在）',
+                    'name' => $class->students->firstWhere('id', $record->student_id)?->displayName() ?? '（學生資料不存在）',
                     'period' => $periodLabel,
                     'status' => $record->status->label(),
                     'followUps' => $record->followUps,

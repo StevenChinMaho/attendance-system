@@ -30,8 +30,18 @@
 
             <div>
                 <label class="field-label">姓名</label>
-                <input type="text" wire:model="name" class="field-input">
-                @error('name') <p class="field-error">{{ $message }}</p> @enderror
+                {{-- 連結帳號時姓名一律沿用該帳號的姓名，不用再手動打
+                     一次——見 App\Models\Concerns\HasLinkableAccountName
+                     的說明，跟教師管理同一套處理方式。 --}}
+                @if ($userId)
+                    <p class="field-input bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-500">
+                        {{ $availableUsers->firstWhere('id', $userId)?->name }}
+                    </p>
+                    <p class="field-hint">已連結帳號，姓名直接沿用該帳號登記的姓名。</p>
+                @else
+                    <input type="text" wire:model="name" class="field-input">
+                    @error('name') <p class="field-error">{{ $message }}</p> @enderror
+                @endif
             </div>
 
             <div>
@@ -46,7 +56,7 @@
 
             <div class="col-span-2">
                 <label class="field-label">連結登入帳號（選填，副班長才需要）</label>
-                <select wire:model="userId" class="field-input">
+                <select wire:model.live="userId" class="field-input">
                     <option value="">不連結帳號</option>
                     @foreach ($availableUsers as $user)
                         <option value="{{ $user->id }}">{{ $user->name }}（{{ $user->username }}）</option>
@@ -90,15 +100,21 @@
                                 <form wire:submit="updateStudent" class="flex flex-wrap items-center gap-2">
                                     <input type="text" wire:model="seatNumber" class="field-input mt-0 w-16 py-1">
                                     <input type="text" wire:model="studentNumber" class="field-input mt-0 w-24 py-1">
-                                    <input type="text" wire:model="name" class="field-input mt-0 py-1">
+                                    @if ($userId)
+                                        <span class="field-input mt-0 w-auto bg-slate-100 py-1 text-slate-500 dark:bg-slate-900 dark:text-slate-500">
+                                            {{ $availableUsers->firstWhere('id', $userId)?->name }}
+                                        </span>
+                                    @else
+                                        <input type="text" wire:model="name" class="field-input mt-0 py-1">
+                                    @endif
                                     <select wire:model="gender" class="field-input mt-0 py-1">
                                         <option value="男">男</option>
                                         <option value="女">女</option>
                                     </select>
-                                    <select wire:model="userId" class="field-input mt-0 py-1">
+                                    <select wire:model.live="userId" class="field-input mt-0 py-1">
                                         <option value="">不連結帳號</option>
                                         @foreach ($availableUsers as $user)
-                                            <option value="{{ $user->id }}">{{ $user->name }}</option>
+                                            <option value="{{ $user->id }}">{{ $user->name }}（{{ $user->username }}）</option>
                                         @endforeach
                                     </select>
                                     <button type="submit" class="btn-primary btn-xs">儲存</button>
@@ -110,7 +126,7 @@
                         @else
                             <td>{{ $student->seat_number }}</td>
                             <td>{{ $student->student_number }}</td>
-                            <td>{{ $student->name }}</td>
+                            <td>{{ $student->displayName() }}</td>
                             <td>{{ $student->gender }}</td>
                             <td>{{ $student->user?->username ?? '—' }}</td>
                             <td>

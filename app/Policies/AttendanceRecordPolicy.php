@@ -13,13 +13,21 @@ use App\Models\User;
  */
 class AttendanceRecordPolicy
 {
+    /**
+     * can('classes.manage') 一律放行，理由跟 SchoolClassPolicy::
+     * recordAttendance() 完全一樣：檢查 permission 而不是寫死
+     * hasRole('admin')，這樣一個被賦予跟 admin 同等權限組合的自訂身分
+     * （見 App\Livewire\Admin\RoleManager），才不會因為沒有連結任何
+     * Teacher/Student 業務身份、ownSchoolClasses() 必定是空集合，而
+     * 完全無法管理任何班級的處理情形。
+     */
     public function manageFollowUp(User $user, AttendanceRecord $record): bool
     {
         if (! $user->can('attendance.follow_up.manage')) {
             return false;
         }
 
-        if ($user->hasRole('admin')) {
+        if ($user->can('classes.manage')) {
             return true;
         }
 

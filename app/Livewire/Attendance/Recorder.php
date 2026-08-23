@@ -201,7 +201,10 @@ class Recorder extends Component
 
     protected function students(): Collection
     {
-        return $this->studentsCache ??= $this->schoolClass->students()->orderBySeatNumber()->get();
+        // with('user')：Student::displayName()（見 blade 裡的名字欄）連結
+        // 帳號時會讀 $this->user->name，沒有 eager load 每個學生都會各自
+        // 多發一次查詢。
+        return $this->studentsCache ??= $this->schoolClass->students()->with('user')->orderBySeatNumber()->get();
     }
 
     /**
