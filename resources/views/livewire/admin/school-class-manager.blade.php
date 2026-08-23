@@ -50,14 +50,54 @@
             </div>
 
             <div class="col-span-2">
-                <label class="field-label">導師（選填，之後可再指派）</label>
+                <div class="flex items-center justify-between">
+                    <label class="field-label">導師（選填，之後可再指派）</label>
+                    {{-- 以前一定要先跳到「教師管理」把老師建好才能回這裡選，
+                         第一次設定新班級容易搞不清楚兩個頁面的關係——這裡
+                         直接內嵌一個新增老師的小面板，見
+                         SchoolClassManager::quickAddTeacher()。 --}}
+                    <button type="button" wire:click="toggleQuickAddTeacher" class="text-xs text-indigo-600 hover:underline dark:text-indigo-400">
+                        {{ $showQuickAddTeacher ? '取消新增老師' : '+ 新增老師' }}
+                    </button>
+                </div>
                 <select wire:model="homeroomTeacherId" class="field-input">
                     <option value="">尚未指派</option>
                     @foreach ($teachers as $teacher)
-                        <option value="{{ $teacher->id }}">{{ $teacher->teacher_name }}</option>
+                        <option value="{{ $teacher->id }}">{{ $teacher->displayName() }}</option>
                     @endforeach
                 </select>
                 @error('homeroomTeacherId') <p class="field-error">{{ $message }}</p> @enderror
+
+                @if ($showQuickAddTeacher)
+                    <div class="mt-3 space-y-3 rounded-md border border-slate-200 p-4 dark:border-slate-700">
+                        <div>
+                            <label class="field-label">連結登入帳號（選填）</label>
+                            <select wire:model.live="newTeacherUserId" class="field-input">
+                                <option value="">不連結帳號</option>
+                                @foreach ($availableUsersForTeacher as $user)
+                                    <option value="{{ $user->id }}">{{ $user->name }}（{{ $user->username }}）</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="field-label">姓名</label>
+                            @if ($newTeacherUserId)
+                                <p class="field-input bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-500">
+                                    {{ $availableUsersForTeacher->firstWhere('id', $newTeacherUserId)?->name }}
+                                </p>
+                                <p class="field-hint">已連結帳號，姓名直接沿用該帳號登記的姓名。</p>
+                            @else
+                                <input type="text" wire:model="newTeacherName" class="field-input">
+                                @error('newTeacherName') <p class="field-error">{{ $message }}</p> @enderror
+                            @endif
+                        </div>
+
+                        <button type="button" wire:click="quickAddTeacher" class="btn-secondary btn-xs">
+                            建立並選為導師
+                        </button>
+                    </div>
+                @endif
             </div>
 
             <div class="col-span-2">
@@ -104,7 +144,7 @@
                                     <select wire:model="homeroomTeacherId" class="field-input mt-0 py-1">
                                         <option value="">尚未指派</option>
                                         @foreach ($teachers as $teacher)
-                                            <option value="{{ $teacher->id }}">{{ $teacher->teacher_name }}</option>
+                                            <option value="{{ $teacher->id }}">{{ $teacher->displayName() }}</option>
                                         @endforeach
                                     </select>
                                     <button type="submit" class="btn-primary btn-xs">儲存</button>
@@ -114,7 +154,7 @@
                             </td>
                         @else
                             <td>{{ $class->shortLabel() }}</td>
-                            <td>{{ $class->homeroomTeacher?->teacher_name ?? '尚未指派' }}</td>
+                            <td>{{ $class->homeroomTeacher?->displayName() ?? '尚未指派' }}</td>
                             <td>{{ $class->students->count() }}</td>
                             <td>
                                 <div class="action-group">

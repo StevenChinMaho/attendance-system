@@ -187,6 +187,54 @@ class SchoolClassManagerTest extends TestCase
         $this->assertSame('9', $existing->fresh()->class_number);
     }
 
+    public function test_quick_added_teacher_is_created_and_selected_into_the_currently_open_form(): void
+    {
+        // 以前一定要先跳到「教師管理」把老師建好才能回這裡選——這裡驗證
+        // 內嵌的快速新增面板真的會建立老師，並且自動選進正在開著的表單
+        // （新增班級）的 homeroomTeacherId，不用整個離開這一頁。
+        $component = Livewire::actingAs($this->admin())
+            ->test(SchoolClassManager::class)
+            ->call('toggleCreateForm')
+            ->call('toggleQuickAddTeacher')
+            ->set('newTeacherName', '快速新增的老師')
+            ->call('quickAddTeacher')
+            ->assertHasNoErrors()
+            ->assertSet('showQuickAddTeacher', false);
+
+        $teacher = Teacher::where('teacher_name', '快速新增的老師')->firstOrFail();
+
+        $component->assertSet('homeroomTeacherId', $teacher->id);
+    }
+
+    public function test_quick_add_teacher_links_an_account_and_uses_its_name(): void
+    {
+        $account = User::factory()->create(['name' => '帳號的姓名']);
+
+        $component = Livewire::actingAs($this->admin())
+            ->test(SchoolClassManager::class)
+            ->call('toggleCreateForm')
+            ->call('toggleQuickAddTeacher')
+            ->set('newTeacherUserId', $account->id)
+            ->call('quickAddTeacher')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('teachers', ['teacher_name' => '帳號的姓名', 'user_id' => $account->id]);
+
+        $teacher = Teacher::where('user_id', $account->id)->firstOrFail();
+        $component->assertSet('homeroomTeacherId', $teacher->id);
+    }
+
+    public function test_quick_add_teacher_name_is_required_when_no_account_is_linked(): void
+    {
+        Livewire::actingAs($this->admin())
+            ->test(SchoolClassManager::class)
+            ->call('toggleCreateForm')
+            ->call('toggleQuickAddTeacher')
+            ->set('newTeacherName', '')
+            ->call('quickAddTeacher')
+            ->assertHasErrors('newTeacherName');
+    }
+
     public function test_the_classes_table_no_longer_offers_a_take_attendance_link(): void
     {
         // 點名入口統一收斂到 nav bar 的 AttendanceQuickLink，管理者不再

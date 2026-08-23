@@ -6,6 +6,8 @@ use App\Livewire\Concerns\RequiresPermission;
 use App\Livewire\Concerns\ScopesToSelectedAcademicPeriod;
 use App\Models\SchoolClass;
 use App\Models\Teacher;
+use App\Models\User;
+use App\Rules\UserAccountIsUnlinked;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\On;
 use Livewire\Component;
@@ -30,6 +32,56 @@ class SchoolClassManager extends Component
     public bool $showCreateForm = false;
 
     public ?int $editingClassId = null;
+
+    /**
+     * 「指派導師」以前一定要先跳到「教師管理」把老師建好，才能回這裡
+     * 選——第一次設定新班級的導師時，兩個頁面來回切換很容易讓人搞不
+     * 清楚「班級管理」跟「教師管理」的關係。這裡讓指派導師的下拉選單
+     * 旁邊多一個「新增老師」的小面板，建立完直接自動選進 $homeroomTeacherId
+     * （不管目前開著的是新增班級表單還是編輯班級表單，兩者共用同一個
+     * 屬性），不用真的離開這一頁。
+     */
+    public bool $showQuickAddTeacher = false;
+
+    public string $newTeacherName = '';
+
+    public ?int $newTeacherUserId = null;
+
+    protected function quickAddTeacherRules(): array
+    {
+        return [
+            'newTeacherName' => [$this->newTeacherUserId ? 'nullable' : 'required', 'string', 'max:255'],
+            'newTeacherUserId' => [
+                'nullable', 'exists:users,id',
+                new UserAccountIsUnlinked,
+            ],
+        ];
+    }
+
+    public function toggleQuickAddTeacher(): void
+    {
+        $this->showQuickAddTeacher = ! $this->showQuickAddTeacher;
+
+        if ($this->showQuickAddTeacher) {
+            $this->reset(['newTeacherName', 'newTeacherUserId']);
+        }
+    }
+
+    public function quickAddTeacher(): void
+    {
+        $this->validate($this->quickAddTeacherRules());
+
+        $teacher = Teacher::create([
+            'teacher_name' => Teacher::resolveName($this->newTeacherUserId, $this->newTeacherName),
+            'user_id' => $this->newTeacherUserId,
+        ]);
+
+        $this->homeroomTeacherId = $teacher->id;
+        $this->showQuickAddTeacher = false;
+        $this->reset(['newTeacherName', 'newTeacherUserId']);
+
+        session()->flash('status', "老師「{$teacher->teacher_name}」建立成功，已自動選為導師。");
+    }
 
     /**
      * 新增班級時，學年度／學期不開放自由輸入，一律鎖定成 nav bar 目前
@@ -167,13 +219,17 @@ class SchoolClassManager extends Component
     public function render()
     {
         return view('livewire.admin.school-class-manager', [
-            'classes' => SchoolClass::with(['homeroomTeacher', 'students'])
+            // homeroomTeacher.user 一併 eager load：Teacher::displayName()
+            // 有連結帳號時會讀 $this->user->name，沒有 eager load 的話
+            // 每一列班級都會各自多發一次查詢。
+            'classes' => SchoolClass::with(['homeroomTeacher.user', 'students'])
                 ->where('academic_year', $this->selectedAcademicYear)
                 ->where('semester', $this->selectedSemester)
                 ->orderBy('grade')
                 ->orderByClassNumber()
                 ->paginate(15),
-            'teachers' => Teacher::orderBy('teacher_name')->get(),
+            'teachers' => Teacher::with('user')->orderBy('teacher_name')->get(),
+            'availableUsersForTeacher' => User::availableForLinking()->orderBy('name')->get(),
         ]);
     }
 }

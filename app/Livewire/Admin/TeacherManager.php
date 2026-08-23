@@ -23,10 +23,15 @@ class TeacherManager extends Component
 
     public ?int $editingTeacherId = null;
 
+    /**
+     * 有連結帳號時姓名不是必填——會直接沿用帳號的姓名（見
+     * Teacher::resolveName()），這裡的 teacherName 值根本不會被用到。
+     * 只有沒連結帳號的老師才需要真的驗證有沒有打姓名。
+     */
     protected function rules(): array
     {
         return [
-            'teacherName' => ['required', 'string', 'max:255'],
+            'teacherName' => [$this->userId ? 'nullable' : 'required', 'string', 'max:255'],
             'userId' => [
                 'nullable', 'exists:users,id',
                 new UserAccountIsUnlinked(ignoreTeacherId: $this->editingTeacherId),
@@ -58,7 +63,7 @@ class TeacherManager extends Component
         $this->validate();
 
         $teacher = Teacher::create([
-            'teacher_name' => $this->teacherName,
+            'teacher_name' => Teacher::resolveName($this->userId, $this->teacherName),
             'user_id' => $this->userId,
         ]);
 
@@ -84,7 +89,7 @@ class TeacherManager extends Component
 
         $teacher = Teacher::findOrFail($this->editingTeacherId);
         $teacher->update([
-            'teacher_name' => $this->teacherName,
+            'teacher_name' => Teacher::resolveName($this->userId, $this->teacherName),
             'user_id' => $this->userId,
         ]);
 

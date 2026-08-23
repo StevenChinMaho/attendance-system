@@ -56,17 +56,46 @@ class TeacherManagerTest extends TestCase
 
     public function test_admin_can_create_a_teacher_linked_to_an_account(): void
     {
-        $account = User::factory()->create();
+        // 連結帳號時姓名不需要（也不應該）手動打，直接沿用帳號本身的
+        // users.name——見 Teacher::resolveName() 的說明：帳號本身就有
+        // 姓名了，分開輸入容易兩邊打成不一樣的字。
+        $account = User::factory()->create(['name' => '李老師']);
         $account->assignRole('homeroom_teacher');
 
         Livewire::actingAs($this->admin())
             ->test(TeacherManager::class)
-            ->set('teacherName', '李老師')
             ->set('userId', $account->id)
             ->call('createTeacher')
             ->assertHasNoErrors();
 
         $this->assertDatabaseHas('teachers', ['teacher_name' => '李老師', 'user_id' => $account->id]);
+    }
+
+    public function test_a_manually_typed_name_is_ignored_when_an_account_is_linked(): void
+    {
+        // 就算 userId 跟 teacherName 被同時設定成不一致的值一起送出
+        // （不管是不是正常操作流程），伺服器端還是要以帳號的姓名為準，
+        // 不能讓用戶端夾帶的 teacherName 蓋過去。
+        $account = User::factory()->create(['name' => '真正的姓名']);
+
+        Livewire::actingAs($this->admin())
+            ->test(TeacherManager::class)
+            ->set('userId', $account->id)
+            ->set('teacherName', '不應該用到這個名字')
+            ->call('createTeacher')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('teachers', ['teacher_name' => '真正的姓名']);
+        $this->assertDatabaseMissing('teachers', ['teacher_name' => '不應該用到這個名字']);
+    }
+
+    public function test_name_is_required_when_no_account_is_linked(): void
+    {
+        Livewire::actingAs($this->admin())
+            ->test(TeacherManager::class)
+            ->set('teacherName', '')
+            ->call('createTeacher')
+            ->assertHasErrors('teacherName');
     }
 
     public function test_linking_an_account_already_used_by_another_teacher_fails_validation(): void

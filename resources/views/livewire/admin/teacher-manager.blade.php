@@ -15,20 +15,30 @@
     @if ($showCreateForm)
         <form wire:submit="createTeacher" class="surface mt-6 space-y-4 p-6">
             <div>
-                <label class="field-label">姓名</label>
-                <input type="text" wire:model="teacherName" class="field-input">
-                @error('teacherName') <p class="field-error">{{ $message }}</p> @enderror
-            </div>
-
-            <div>
                 <label class="field-label">連結登入帳號（選填）</label>
-                <select wire:model="userId" class="field-input">
+                <select wire:model.live="userId" class="field-input">
                     <option value="">不連結帳號</option>
                     @foreach ($availableUsers as $user)
                         <option value="{{ $user->id }}">{{ $user->name }}（{{ $user->username }}）</option>
                     @endforeach
                 </select>
                 <p class="field-hint">只有需要登入系統的導師才需要連結帳號，帳號要先在「帳號管理」建立好。</p>
+            </div>
+
+            <div>
+                <label class="field-label">姓名</label>
+                {{-- 連結帳號時姓名一律沿用該帳號的姓名，不用再手動打一次
+                     ——見 App\Models\Teacher::resolveName() 的說明：帳號
+                     本身就有姓名了，分開輸入容易兩邊打成不一樣的字。 --}}
+                @if ($userId)
+                    <p class="field-input bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-500">
+                        {{ $availableUsers->firstWhere('id', $userId)?->name }}
+                    </p>
+                    <p class="field-hint">已連結帳號，姓名直接沿用該帳號登記的姓名。</p>
+                @else
+                    <input type="text" wire:model="teacherName" class="field-input">
+                    @error('teacherName') <p class="field-error">{{ $message }}</p> @enderror
+                @endif
             </div>
 
             <button type="submit" class="btn-primary">
@@ -57,19 +67,25 @@
                         @if ($editingTeacherId === $teacher->id)
                             <td colspan="3">
                                 <form wire:submit="updateTeacher" class="flex flex-wrap items-center gap-2">
-                                    <input type="text" wire:model="teacherName" class="field-input mt-0 py-1">
-                                    <select wire:model="userId" class="field-input mt-0 py-1">
+                                    <select wire:model.live="userId" class="field-input mt-0 py-1">
                                         <option value="">不連結帳號</option>
                                         @foreach ($availableUsers as $user)
                                             <option value="{{ $user->id }}">{{ $user->name }}（{{ $user->username }}）</option>
                                         @endforeach
                                     </select>
+                                    @if ($userId)
+                                        <span class="field-input mt-0 w-auto bg-slate-100 py-1 text-slate-500 dark:bg-slate-900 dark:text-slate-500">
+                                            {{ $availableUsers->firstWhere('id', $userId)?->name }}
+                                        </span>
+                                    @else
+                                        <input type="text" wire:model="teacherName" class="field-input mt-0 py-1">
+                                    @endif
                                     <button type="submit" class="btn-primary btn-xs">儲存</button>
                                     <button type="button" wire:click="cancelEdit" class="btn-secondary btn-xs">取消</button>
                                 </form>
                             </td>
                         @else
-                            <td>{{ $teacher->teacher_name }}</td>
+                            <td>{{ $teacher->displayName() }}</td>
                             <td>{{ $teacher->user?->username ?? '—' }}</td>
                             <td>
                                 <div class="action-group">
