@@ -32,6 +32,17 @@ class StudentManager extends Component
 
     public ?int $editingStudentId = null;
 
+    /**
+     * 標記已轉出要能手動輸入轉出日期（不是一律「現在按下去的這一刻」）
+     * ——admin 很可能是事後才幫忙補標記，實際轉出日通常是過去某一天，
+     * 而 Recorder/StatusBoard 排除已轉出學生的邏輯正是照這個日期判斷
+     * 「補登哪些過去的日子還要讓他出現在名冊裡」，日期不準的話那個
+     * 邊界就會跟著錯。
+     */
+    public ?int $markingLeftStudentId = null;
+
+    public string $leftDate = '';
+
     public function mount(SchoolClass $schoolClass): void
     {
         $this->schoolClass = $schoolClass;
@@ -92,6 +103,7 @@ class StudentManager extends Component
         }
 
         $this->cancelEdit();
+        $this->cancelMarkAsLeft();
         $this->showCreateForm = true;
     }
 
@@ -117,6 +129,7 @@ class StudentManager extends Component
         // 理由跟 toggleCreateForm() 一樣：新增表單如果還開著，會跟編輯
         // 表單同時顯示、共用同一組欄位屬性。
         $this->showCreateForm = false;
+        $this->cancelMarkAsLeft();
 
         $this->editingStudentId = $student->id;
         $this->studentNumber = $student->student_number;
@@ -150,19 +163,54 @@ class StudentManager extends Component
     }
 
     /**
-     * 轉學／畢業離校用——不是刪除，見 Student::scopeActive() 的說明。
+     * 開啟「標記已轉出」的日期輸入面板——不直接標記，因為轉出日期
+     * 通常是過去某一天（admin 是事後補標記），不該一律等於「現在按下
+     * 這個按鈕的當下」。預設帶入今天，符合最常見的「今天知道、今天
+     * 標記」情境，但可以改成任何日期。
+     */
+    public function startMarkAsLeft(Student $student): void
+    {
+        $this->showCreateForm = false;
+        $this->cancelEdit();
+
+        $this->markingLeftStudentId = $student->id;
+        $this->leftDate = now()->toDateString();
+    }
+
+    /**
      * 用 $this->schoolClass->students()->findOrFail() 而不是直接信任
      * 傳進來的 $student，理由跟 updateStudent() 一樣：即使 Livewire
      * 的隱含 model binding 解析出來的是真實存在的學生，也要再次確認
      * 這筆資料確實屬於目前這個班級，不是別班的學生 ID。
      */
-    public function toggleLeft(Student $student): void
+    public function confirmMarkAsLeft(): void
+    {
+        $this->validate(['leftDate' => ['required', 'date']]);
+
+        $student = $this->schoolClass->students()->findOrFail($this->markingLeftStudentId);
+
+        $student->forceFill(['left_at' => $this->leftDate])->save();
+
+        $this->cancelMarkAsLeft();
+
+        session()->flash('status', "學生「{$student->displayName()}」已標記為 {$this->leftDate} 轉出。");
+    }
+
+    public function cancelMarkAsLeft(): void
+    {
+        $this->reset(['markingLeftStudentId', 'leftDate']);
+    }
+
+    /**
+     * 恢復在讀不需要日期，直接清空 left_at 即可。
+     */
+    public function restoreStudent(Student $student): void
     {
         $student = $this->schoolClass->students()->findOrFail($student->id);
 
-        $student->forceFill([
-            'left_at' => $student->left_at ? null : now(),
-        ])->save();
+        $student->forceFill(['left_at' => null])->save();
+
+        session()->flash('status', "學生「{$student->displayName()}」已恢復為在讀。");
     }
 
     /**

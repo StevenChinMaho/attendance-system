@@ -131,6 +131,17 @@
                                 @error('studentNumber') <p class="field-error">{{ $message }}</p> @enderror
                                 @error('seatNumber') <p class="field-error">{{ $message }}</p> @enderror
                             </td>
+                        @elseif ($markingLeftStudentId === $student->id)
+                            <td colspan="7">
+                                <form wire:submit="confirmMarkAsLeft" class="flex flex-wrap items-center gap-2">
+                                    <span class="text-sm text-slate-600 dark:text-slate-300">轉出日期：</span>
+                                    <input type="date" wire:model="leftDate" class="field-input mt-0 py-1">
+                                    <button type="submit" class="btn-primary btn-xs">確認標記已轉出</button>
+                                    <button type="button" wire:click="cancelMarkAsLeft" class="btn-secondary btn-xs">取消</button>
+                                </form>
+                                <p class="field-hint">預設是今天，如果實際轉出是過去某一天，改成那一天即可——這會影響他在那之後的日子是否還會出現在點名名冊裡。</p>
+                                @error('leftDate') <p class="field-error">{{ $message }}</p> @enderror
+                            </td>
                         @else
                             <td>{{ $student->seat_number }}</td>
                             <td>{{ $student->student_number }}</td>
@@ -151,14 +162,20 @@
                                     <button type="button" wire:click="startEdit({{ $student->id }})" class="btn-secondary btn-xs">
                                         編輯
                                     </button>
-                                    <button
-                                        type="button"
-                                        wire:click="toggleLeft({{ $student->id }})"
-                                        wire:confirm="{{ $student->left_at ? "確定要把「{$student->displayName()}」恢復為在讀嗎？" : "確定要把「{$student->displayName()}」標記為已轉出嗎？之後不會再出現在點名名冊裡。" }}"
-                                        class="btn-secondary btn-xs"
-                                    >
-                                        {{ $student->left_at ? '恢復在讀' : '標記已轉出' }}
-                                    </button>
+                                    @if ($student->left_at)
+                                        <button
+                                            type="button"
+                                            wire:click="restoreStudent({{ $student->id }})"
+                                            wire:confirm="確定要把「{{ $student->displayName() }}」恢復為在讀嗎？"
+                                            class="btn-secondary btn-xs"
+                                        >
+                                            恢復在讀
+                                        </button>
+                                    @else
+                                        <button type="button" wire:click="startMarkAsLeft({{ $student->id }})" class="btn-secondary btn-xs">
+                                            標記已轉出
+                                        </button>
+                                    @endif
                                     @if ($student->attendance_records_count === 0)
                                         <button
                                             type="button"

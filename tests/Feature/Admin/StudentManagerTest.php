@@ -205,16 +205,52 @@ class StudentManagerTest extends TestCase
             ->assertHasErrors('userId');
     }
 
-    public function test_admin_can_mark_a_student_as_left(): void
+    public function test_admin_can_mark_a_student_as_left_defaulting_to_today(): void
     {
         $class = SchoolClass::factory()->create();
         $student = Student::factory()->for($class, 'schoolClass')->create(['left_at' => null]);
 
         Livewire::actingAs($this->admin())
             ->test(StudentManager::class, ['schoolClass' => $class])
-            ->call('toggleLeft', $student->id);
+            ->call('startMarkAsLeft', $student->id)
+            ->assertSet('leftDate', now()->toDateString())
+            ->call('confirmMarkAsLeft')
+            ->assertHasNoErrors();
 
-        $this->assertNotNull($student->fresh()->left_at);
+        $this->assertSame(now()->toDateString(), $student->fresh()->left_at->toDateString());
+    }
+
+    public function test_admin_can_manually_enter_a_past_date_when_marking_a_student_as_left(): void
+    {
+        // 常見情境：admin 是事後才幫忙補標記，實際轉出日是過去某一天，
+        // 不該一律等於「現在按下去的這一刻」。
+        $class = SchoolClass::factory()->create();
+        $student = Student::factory()->for($class, 'schoolClass')->create(['left_at' => null]);
+        $actualLeaveDate = now()->subMonth()->toDateString();
+
+        Livewire::actingAs($this->admin())
+            ->test(StudentManager::class, ['schoolClass' => $class])
+            ->call('startMarkAsLeft', $student->id)
+            ->set('leftDate', $actualLeaveDate)
+            ->call('confirmMarkAsLeft')
+            ->assertHasNoErrors();
+
+        $this->assertSame($actualLeaveDate, $student->fresh()->left_at->toDateString());
+    }
+
+    public function test_marking_as_left_requires_a_valid_date(): void
+    {
+        $class = SchoolClass::factory()->create();
+        $student = Student::factory()->for($class, 'schoolClass')->create(['left_at' => null]);
+
+        Livewire::actingAs($this->admin())
+            ->test(StudentManager::class, ['schoolClass' => $class])
+            ->call('startMarkAsLeft', $student->id)
+            ->set('leftDate', '')
+            ->call('confirmMarkAsLeft')
+            ->assertHasErrors('leftDate');
+
+        $this->assertNull($student->fresh()->left_at);
     }
 
     public function test_admin_can_restore_a_student_marked_as_left(): void
@@ -224,7 +260,7 @@ class StudentManagerTest extends TestCase
 
         Livewire::actingAs($this->admin())
             ->test(StudentManager::class, ['schoolClass' => $class])
-            ->call('toggleLeft', $student->id);
+            ->call('restoreStudent', $student->id);
 
         $this->assertNull($student->fresh()->left_at);
     }
@@ -239,7 +275,35 @@ class StudentManagerTest extends TestCase
 
         Livewire::actingAs($this->admin())
             ->test(StudentManager::class, ['schoolClass' => $class])
-            ->call('toggleLeft', $studentInOtherClass->id);
+            ->call('startMarkAsLeft', $studentInOtherClass->id)
+            ->call('confirmMarkAsLeft');
+    }
+
+    public function test_a_student_from_another_class_cannot_be_restored_through_this_page(): void
+    {
+        $class = SchoolClass::factory()->create();
+        $otherClass = SchoolClass::factory()->create();
+        $studentInOtherClass = Student::factory()->for($otherClass, 'schoolClass')->create(['left_at' => now()]);
+
+        $this->expectException(ModelNotFoundException::class);
+
+        Livewire::actingAs($this->admin())
+            ->test(StudentManager::class, ['schoolClass' => $class])
+            ->call('restoreStudent', $studentInOtherClass->id);
+    }
+
+    public function test_opening_the_mark_as_left_panel_while_editing_closes_the_edit_form(): void
+    {
+        $class = SchoolClass::factory()->create();
+        $student = Student::factory()->for($class, 'schoolClass')->create();
+
+        Livewire::actingAs($this->admin())
+            ->test(StudentManager::class, ['schoolClass' => $class])
+            ->call('startEdit', $student->id)
+            ->assertSet('editingStudentId', $student->id)
+            ->call('startMarkAsLeft', $student->id)
+            ->assertSet('editingStudentId', null)
+            ->assertSet('markingLeftStudentId', $student->id);
     }
 
     public function test_admin_can_delete_a_student_with_no_attendance_history(): void
