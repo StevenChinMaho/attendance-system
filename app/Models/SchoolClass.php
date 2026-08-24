@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Models\Concerns\HasNaturalStringSort;
 use App\Policies\SchoolClassPolicy;
 use Database\Factories\SchoolClassFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -18,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class SchoolClass extends Model
 {
     /** @use HasFactory<SchoolClassFactory> */
-    use HasFactory, HasNaturalStringSort;
+    use HasFactory;
 
     protected function casts(): array
     {
@@ -26,6 +25,7 @@ class SchoolClass extends Model
             'academic_year' => 'integer',
             'semester' => 'integer',
             'grade' => 'integer',
+            'class_number' => 'integer',
         ];
     }
 
@@ -68,6 +68,9 @@ class SchoolClass extends Model
 
     public function scopeOrderByClassNumber(Builder $query): Builder
     {
-        return $this->scopeNaturalSortBy($query, 'class_number');
+        // class_number 現在是整數，排序天生正確，不再需要 HasNaturalStringSort
+        // 那個「先按長度、再按字典序」的技巧（那是給字串欄位用的，見
+        // Student::scopeOrderBySeatNumber()，座號還是字串）。
+        return $query->orderBy('class_number');
     }
 }

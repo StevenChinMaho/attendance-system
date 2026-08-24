@@ -64,9 +64,10 @@ class StudentManager extends Component
         return [
             'studentNumber' => [
                 'required', 'string', 'max:255',
-                Rule::unique('students', 'student_number')
-                    ->where('school_class_id', $this->schoolClass->id)
-                    ->ignore($this->editingStudentId),
+                // 全校唯一，不是「這個班級裡面」唯一——同一個真實學生從入學
+                // 到畢業自始至終只有一筆 students 資料（見 system_structure.md
+                // 學年制度），學號本來就該是這一筆資料的全校唯一身分。
+                Rule::unique('students', 'student_number')->ignore($this->editingStudentId),
             ],
             'seatNumber' => [
                 'required', 'string', 'max:255',
@@ -86,7 +87,7 @@ class StudentManager extends Component
     protected function messages(): array
     {
         return [
-            'studentNumber.unique' => '這個班級裡已經有相同學號的學生了。',
+            'studentNumber.unique' => '這個學號已經有學生使用了。',
             'seatNumber.unique' => '這個班級裡已經有相同座號的學生了。',
         ];
     }

@@ -101,8 +101,11 @@ class StudentManagerTest extends TestCase
             ->assertHasErrors('seatNumber');
     }
 
-    public function test_same_student_number_in_a_different_class_is_allowed(): void
+    public function test_same_student_number_in_a_different_class_is_rejected(): void
     {
+        // 學號是全校唯一，不是只在單一班級內唯一——同一個真實學生從入學
+        // 到畢業自始至終只有一筆 students 資料，不該有兩個不同班級、不同
+        // 學生共用同一個學號的情況。
         $otherClass = SchoolClass::factory()->create();
         Student::factory()->for($otherClass, 'schoolClass')->create(['student_number' => '10001']);
 
@@ -115,7 +118,7 @@ class StudentManagerTest extends TestCase
             ->set('name', '陳小明')
             ->set('gender', '男')
             ->call('createStudent')
-            ->assertHasNoErrors();
+            ->assertHasErrors('studentNumber');
     }
 
     public function test_admin_can_link_a_student_rep_account_to_a_student(): void

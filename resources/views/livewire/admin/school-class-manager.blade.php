@@ -58,7 +58,7 @@
 
             <div>
                 <label class="field-label">班級代號</label>
-                <input type="text" wire:model="classNumber" placeholder="例如：1" class="field-input">
+                <input type="number" min="1" wire:model="classNumber" placeholder="例如：1" class="field-input">
                 @error('classNumber') <p class="field-error">{{ $message }}</p> @enderror
             </div>
 
@@ -153,7 +153,7 @@
                                         <option value="2">二年級</option>
                                         <option value="3">三年級</option>
                                     </select>
-                                    <input type="text" wire:model="classNumber" class="field-input mt-0 w-20 py-1">
+                                    <input type="number" min="1" wire:model="classNumber" class="field-input mt-0 w-20 py-1">
                                     <select wire:model="homeroomTeacherId" class="field-input mt-0 py-1">
                                         <option value="">尚未指派</option>
                                         @foreach ($teachers as $teacher)

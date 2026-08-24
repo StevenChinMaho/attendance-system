@@ -33,7 +33,7 @@ class SchoolClassFactory extends Factory
             // 測試套件跑下來建立夠多班級時會有真實機率互相撞號，讓測試
             // 偶發性失敗——遞增保證每次呼叫這個 factory 都是全新的班級
             // 代號，不會跟任何一筆已建立的紀錄衝突。
-            'class_number' => (string) (++$classNumber),
+            'class_number' => ++$classNumber,
         ];
     }
 }

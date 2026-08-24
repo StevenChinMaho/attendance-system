@@ -130,7 +130,7 @@ class SchoolClassManagerTest extends TestCase
             ->pluck('class_number')
             ->all();
 
-        $this->assertSame(['5'], $classNumbers);
+        $this->assertSame([5], $classNumbers);
     }
 
     public function test_classes_are_listed_in_natural_numeric_order_not_string_order(): void
@@ -146,7 +146,7 @@ class SchoolClassManagerTest extends TestCase
             ->pluck('class_number')
             ->all();
 
-        $this->assertSame(['2', '10'], $labels);
+        $this->assertSame([2, 10], $labels);
     }
 
     public function test_admin_can_assign_a_homeroom_teacher(): void
@@ -202,7 +202,7 @@ class SchoolClassManagerTest extends TestCase
         $this->assertDatabaseHas('school_classes', [
             'academic_year' => 113, 'semester' => 1, 'grade' => 2, 'class_number' => '3',
         ]);
-        $this->assertSame('9', $existing->fresh()->class_number);
+        $this->assertSame(9, $existing->fresh()->class_number);
     }
 
     public function test_quick_added_teacher_is_created_and_selected_into_the_currently_open_form(): void

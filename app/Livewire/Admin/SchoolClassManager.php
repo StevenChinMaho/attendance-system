@@ -96,7 +96,7 @@ class SchoolClassManager extends Component
         return [
             'grade' => ['required', 'integer', 'in:1,2,3'],
             'classNumber' => [
-                'required', 'string', 'max:255',
+                'required', 'integer', 'min:1',
                 Rule::unique('school_classes', 'class_number')
                     ->where('academic_year', $this->selectedAcademicYear)
                     ->where('semester', $this->selectedSemester)
@@ -113,7 +113,7 @@ class SchoolClassManager extends Component
             'semester' => ['required', 'integer', 'in:1,2'],
             'grade' => ['required', 'integer', 'in:1,2,3'],
             'classNumber' => [
-                'required', 'string', 'max:255',
+                'required', 'integer', 'min:1',
                 Rule::unique('school_classes', 'class_number')
                     ->where('academic_year', $this->academicYear)
                     ->where('semester', $this->semester)
