@@ -46,6 +46,22 @@ class SchoolClassManagerTest extends TestCase
         $this->actingAs($rep)->get('/admin/classes')->assertForbidden();
     }
 
+    public function test_no_non_current_period_warning_is_shown_by_default(): void
+    {
+        Livewire::actingAs($this->admin())
+            ->test(SchoolClassManager::class)
+            ->assertDontSee('非本學期');
+    }
+
+    public function test_a_non_current_period_warning_is_shown_after_switching_away(): void
+    {
+        AcademicPeriod::setSelected(AcademicPeriod::currentYear() + 1, 1);
+
+        Livewire::actingAs($this->admin())
+            ->test(SchoolClassManager::class)
+            ->assertSee('非本學期');
+    }
+
     public function test_admin_can_create_a_class_in_the_currently_selected_academic_period(): void
     {
         // 新增班級的學年度／學期不是表單自由輸入的，而是鎖定成 nav bar

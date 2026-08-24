@@ -75,4 +75,30 @@ class AcademicPeriodTest extends TestCase
 
         $this->assertSame(range(115, 125), AcademicPeriod::yearOptions());
     }
+
+    public function test_is_selected_current_is_true_before_any_explicit_switch(): void
+    {
+        Carbon::setTestNow('2026-08-22');
+
+        $this->assertTrue(AcademicPeriod::isSelectedCurrent());
+    }
+
+    public function test_is_selected_current_is_false_after_switching_to_a_different_period(): void
+    {
+        Carbon::setTestNow('2026-08-22');
+
+        AcademicPeriod::setSelected(112, 2);
+
+        $this->assertFalse(AcademicPeriod::isSelectedCurrent());
+    }
+
+    public function test_is_selected_current_is_true_again_after_switching_back(): void
+    {
+        Carbon::setTestNow('2026-08-22');
+
+        AcademicPeriod::setSelected(112, 2);
+        AcademicPeriod::setSelected(115, 1);
+
+        $this->assertTrue(AcademicPeriod::isSelectedCurrent());
+    }
 }

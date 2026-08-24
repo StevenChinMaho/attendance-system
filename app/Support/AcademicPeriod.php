@@ -83,6 +83,20 @@ final class AcademicPeriod
     }
 
     /**
+     * 目前選取的學年度／學期，是不是就是「現實世界中此刻真正的」那個
+     * 學年度／學期——選取範圍只在寒暑假才會變動，多數時候切換一次之後
+     * 就會放著不管很久，容易忘記自己還停留在別的學期，看著班級管理、
+     * 即時看板的資料卻誤以為是本學期的。nav bar 的 AcademicPeriodSwitcher
+     * 跟這幾個頁面的「顯示範圍：...」用同一個判斷，需要提醒使用者的地方
+     * 都從這裡讀，不要各自比較 selectedYear()/currentYear() 兜出邏輯。
+     */
+    public static function isSelectedCurrent(): bool
+    {
+        return self::selectedYear() === self::currentYear()
+            && self::selectedSemester() === self::currentSemester();
+    }
+
+    /**
      * 下拉選單可選的學年度範圍：從資料庫最舊一筆班級紀錄的學年度開始，
      * 到目前學年度後推 10 年——涵蓋歷史資料，也預留近期新學年的空間。
      * 一筆班級都還沒有時（例如全新安裝）就從目前學年度開始。

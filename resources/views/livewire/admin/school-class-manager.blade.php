@@ -3,7 +3,14 @@
         <div>
             <h1 class="page-title">班級管理</h1>
             <p class="page-subtitle mt-1">
-                顯示範圍：{{ \App\Support\AcademicPeriod::label($selectedAcademicYear, $selectedSemester) }}，要看別的學年度請用上方導覽列的切換選單。
+                顯示範圍：
+                <span @unless (\App\Support\AcademicPeriod::isSelectedCurrent()) class="font-medium text-amber-600 dark:text-amber-400" @endunless>
+                    {{ \App\Support\AcademicPeriod::label($selectedAcademicYear, $selectedSemester) }}
+                    @unless (\App\Support\AcademicPeriod::isSelectedCurrent())
+                        （非本學期）
+                    @endunless
+                </span>
+                ，要看別的學年度請用上方導覽列的切換選單。
             </p>
         </div>
         <button type="button" wire:click="toggleCreateForm" class="btn-primary">

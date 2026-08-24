@@ -3,7 +3,13 @@
         <div>
             <h1 class="page-title">即時點名看板</h1>
             <p class="page-subtitle mt-1">
-                顯示範圍：{{ \App\Support\AcademicPeriod::label($selectedAcademicYear, $selectedSemester) }}
+                顯示範圍：
+                <span @unless (\App\Support\AcademicPeriod::isSelectedCurrent()) class="font-medium text-amber-600 dark:text-amber-400" @endunless>
+                    {{ \App\Support\AcademicPeriod::label($selectedAcademicYear, $selectedSemester) }}
+                    @unless (\App\Support\AcademicPeriod::isSelectedCurrent())
+                        （非本學期）
+                    @endunless
+                </span>
             </p>
         </div>
 

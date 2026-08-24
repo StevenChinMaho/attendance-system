@@ -73,4 +73,29 @@ class AcademicPeriodSwitcherTest extends TestCase
 
         $this->assertNotSame(3, AcademicPeriod::selectedSemester());
     }
+
+    public function test_no_warning_is_shown_while_viewing_the_actual_current_period(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        Livewire::actingAs($admin)
+            ->test(AcademicPeriodSwitcher::class)
+            ->assertDontSee('非本學期');
+    }
+
+    public function test_a_warning_is_shown_after_switching_away_from_the_current_period(): void
+    {
+        // 選取範圍通常只在寒暑假才會變、切換後容易放著忘記，看著別的
+        // 學期資料卻誤以為是本學期的——切換到非本學期要有明顯提示。
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $differentYear = AcademicPeriod::currentYear() + 1;
+
+        Livewire::actingAs($admin)
+            ->test(AcademicPeriodSwitcher::class)
+            ->set('year', $differentYear)
+            ->assertSee('非本學期');
+    }
 }

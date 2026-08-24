@@ -64,6 +64,30 @@ class StatusBoardTest extends TestCase
             ->assertSee('即時點名看板');
     }
 
+    public function test_no_non_current_period_warning_is_shown_by_default(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        Livewire::actingAs($admin)
+            ->test(StatusBoard::class)
+            ->assertDontSee('非本學期');
+    }
+
+    public function test_a_non_current_period_warning_is_shown_after_switching_away(): void
+    {
+        // 即時看板是每天會一直盯著看的頁面，停留在別的學期卻沒發現特別
+        // 容易造成誤判（以為今天都沒人點名，其實是看錯學期）。
+        AcademicPeriod::setSelected(AcademicPeriod::currentYear() + 1, 1);
+
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        Livewire::actingAs($admin)
+            ->test(StatusBoard::class)
+            ->assertSee('非本學期');
+    }
+
     public function test_losing_the_dashboard_permission_mid_session_blocks_further_polling(): void
     {
         $teacherUser = User::factory()->create();
