@@ -141,6 +141,18 @@ class UserManager extends Component
             return;
         }
 
+        // deleteUser() 擋了「刪除系統裡最後一個 admin」，但編輯身分可以
+        // 達到一模一樣的後果——把最後一個 admin 的身分改成別的角色，
+        // 系統一樣會變成沒有人是字面上的 admin。這裡補上對稱的檢查：
+        // 目標本身是 admin、而且改完之後就不再是 admin、而且他是目前
+        // 系統裡最後一個 admin，才會被擋下來；改成 admin，或系統裡還
+        // 有其他 admin，都不受影響。
+        if ($user->hasRole('admin') && $this->role !== 'admin' && User::role('admin')->count() <= 1) {
+            session()->flash('error', "帳號 {$user->username} 是系統裡最後一個管理者，無法把身分改成其他角色。");
+
+            return;
+        }
+
         $user->update(['name' => $this->name]);
         $user->syncRoles([$this->role]);
 

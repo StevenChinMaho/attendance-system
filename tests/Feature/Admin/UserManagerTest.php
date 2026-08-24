@@ -219,6 +219,47 @@ class UserManagerTest extends TestCase
         $this->assertFalse($fresh->hasRole('student_rep'));
     }
 
+    public function test_the_last_admins_role_cannot_be_changed_away_from_admin(): void
+    {
+        // deleteUser() 擋了「刪除系統裡最後一個 admin」，updateUser()
+        // 也要擋對稱的漏洞：把最後一個 admin 的身分改成別的角色，一樣
+        // 會讓系統沒有人是字面上的 admin。用另一個持有 users.manage
+        // 權限、但不是這個 admin 本人的帳號操作，確保擋下來的是「最後
+        // 一個 admin」這條規則，不是「不能編輯自己」那條。
+        $lastAdmin = User::factory()->create();
+        $lastAdmin->assignRole('admin');
+
+        $role = Role::create(['name' => 'user_operator', 'guard_name' => 'web']);
+        $role->syncPermissions(['users.manage']);
+        $operator = User::factory()->create();
+        $operator->assignRole('user_operator');
+
+        Livewire::actingAs($operator)
+            ->test(UserManager::class)
+            ->call('startEdit', $lastAdmin->id)
+            ->set('role', 'user_operator')
+            ->call('updateUser');
+
+        $this->assertTrue($lastAdmin->fresh()->hasRole('admin'));
+    }
+
+    public function test_an_admins_role_can_be_changed_when_another_admin_still_exists(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $secondAdmin = User::factory()->create();
+        $secondAdmin->assignRole('admin');
+
+        Livewire::actingAs($admin)
+            ->test(UserManager::class)
+            ->call('startEdit', $secondAdmin->id)
+            ->set('role', 'student_rep')
+            ->call('updateUser')
+            ->assertHasNoErrors();
+
+        $this->assertTrue($secondAdmin->fresh()->hasRole('student_rep'));
+    }
+
     public function test_admin_cannot_edit_their_own_account(): void
     {
         // 姓名還好，但身分欄位混在同一個表單裡，萬一手滑把自己的角色
