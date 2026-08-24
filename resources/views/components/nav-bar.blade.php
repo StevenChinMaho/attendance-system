@@ -34,6 +34,11 @@
                     教師管理
                 </a>
             @endcan
+            @can('students.manage')
+                <a href="{{ route('admin.students') }}" class="{{ $linkClass(request()->routeIs('admin.students')) }}">
+                    學生管理
+                </a>
+            @endcan
             @can('classes.manage')
                 <a href="{{ route('admin.classes') }}" class="{{ $linkClass(request()->routeIs('admin.classes*')) }}">
                     班級管理

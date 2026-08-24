@@ -66,9 +66,16 @@ Route::middleware(['auth', EnsureAccountIsActive::class, EnsureUserHasChangedPas
     Route::view('/admin/classes', 'admin.classes')->middleware('can:classes.manage')->name('admin.classes');
     Route::view('/admin/roles', 'admin.roles')->middleware('can:roles.manage')->name('admin.roles');
 
+    // 學生本體（學號/姓名/性別/帳號連結/轉出狀態）跟「這個學生屬於哪個
+    // 班」是兩個不同層次的動作（見 App\Livewire\Admin\StudentManager
+    // 開頭的說明），所以是兩個獨立頁面：這裡是全校學生管理，不掛在
+    // 某個班級底下。
+    Route::view('/admin/students', 'admin.students')->middleware('can:students.manage')->name('admin.students');
+
     // Route::view 不支援隱含路由模型綁定；closure route 又無法被
     // route:cache 序列化，正式環境跑 optimize 會直接炸掉，所以用
-    // invokable controller 兩邊都顧到。
+    // invokable controller 兩邊都顧到。這個路由現在指向「班級名單」
+    // （加入/移出既有學生），不是學生本體的建立/編輯。
     Route::get('/admin/classes/{schoolClass}/students', ShowClassStudentsController::class)
         ->middleware('can:students.manage')
         ->name('admin.classes.students');

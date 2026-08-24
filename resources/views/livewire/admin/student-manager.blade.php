@@ -1,8 +1,18 @@
-<div class="mx-auto max-w-4xl px-4 py-10">
-    <a href="{{ route('admin.classes') }}" class="text-xs text-slate-500 underline hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">← 回班級列表</a>
-
-    <div class="mt-2 flex items-center justify-between">
-        <h1 class="page-title">{{ $schoolClass->shortLabel() }} 學生管理</h1>
+<div class="mx-auto max-w-5xl px-4 py-10">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="page-title">學生管理</h1>
+            <p class="page-subtitle mt-1">
+                「目前班級」欄顯示範圍：
+                <span @unless (\App\Support\AcademicPeriod::isSelectedCurrent()) class="font-medium text-amber-600 dark:text-amber-400" @endunless>
+                    {{ \App\Support\AcademicPeriod::label($selectedAcademicYear, $selectedSemester) }}
+                    @unless (\App\Support\AcademicPeriod::isSelectedCurrent())
+                        （非本學期）
+                    @endunless
+                </span>
+                ，要把學生加入／移出某個班級，請到「班級管理」個別班級的「管理學生」。
+            </p>
+        </div>
         <button type="button" wire:click="toggleCreateForm" class="btn-primary">
             {{ $showCreateForm ? '取消' : '新增學生' }}
         </button>
@@ -29,12 +39,16 @@
             </div>
 
             <div>
-                <label class="field-label">座號</label>
-                <input type="text" wire:model="seatNumber" class="field-input">
-                @error('seatNumber') <p class="field-error">{{ $message }}</p> @enderror
+                <label class="field-label">性別</label>
+                <select wire:model="gender" class="field-input">
+                    <option value="">請選擇</option>
+                    <option value="男">男</option>
+                    <option value="女">女</option>
+                </select>
+                @error('gender') <p class="field-error">{{ $message }}</p> @enderror
             </div>
 
-            <div>
+            <div class="col-span-2">
                 <label class="field-label">姓名</label>
                 {{-- 連結帳號時姓名一律沿用該帳號的姓名，不用再手動打
                      一次——見 App\Models\Concerns\HasLinkableAccountName
@@ -50,16 +64,6 @@
                 @endif
             </div>
 
-            <div>
-                <label class="field-label">性別</label>
-                <select wire:model="gender" class="field-input">
-                    <option value="">請選擇</option>
-                    <option value="男">男</option>
-                    <option value="女">女</option>
-                </select>
-                @error('gender') <p class="field-error">{{ $message }}</p> @enderror
-            </div>
-
             <div class="col-span-2">
                 <label class="field-label">連結登入帳號（選填，副班長才需要）</label>
                 <select wire:model.live="userId" class="field-input">
@@ -71,7 +75,8 @@
             </div>
 
             <div class="col-span-2">
-                <button type="submit" class="btn-primary">
+                <p class="field-hint">建立後這個學生還不屬於任何班級，接下來請到「班級管理」個別班級的「管理學生」把他加進去。</p>
+                <button type="submit" class="btn-primary mt-2">
                     建立
                 </button>
             </div>
@@ -81,20 +86,20 @@
     <div class="table-wrap mt-6">
         <table class="data-table">
             <colgroup>
-                <col style="width: 8%">
                 <col style="width: 13%">
                 <col style="width: 17%">
                 <col style="width: 7%">
+                <col style="width: 15%">
                 <col style="width: 12%">
-                <col style="width: 17%">
-                <col style="width: 26%">
+                <col style="width: 14%">
+                <col style="width: 22%">
             </colgroup>
             <thead>
                 <tr>
-                    <th>座號</th>
                     <th>學號</th>
                     <th>姓名</th>
                     <th>性別</th>
+                    <th>目前班級</th>
                     <th>狀態</th>
                     <th>登入帳號</th>
                     <th></th>
@@ -106,7 +111,6 @@
                         @if ($editingStudentId === $student->id)
                             <td colspan="7">
                                 <form wire:submit="updateStudent" class="flex flex-wrap items-center gap-2">
-                                    <input type="text" wire:model="seatNumber" class="field-input mt-0 w-16 py-1">
                                     <input type="text" wire:model="studentNumber" class="field-input mt-0 w-24 py-1">
                                     @if ($userId)
                                         <span class="field-input mt-0 w-auto bg-slate-100 py-1 text-slate-500 dark:bg-slate-900 dark:text-slate-500">
@@ -129,7 +133,6 @@
                                     <button type="button" wire:click="cancelEdit" class="btn-secondary btn-xs">取消</button>
                                 </form>
                                 @error('studentNumber') <p class="field-error">{{ $message }}</p> @enderror
-                                @error('seatNumber') <p class="field-error">{{ $message }}</p> @enderror
                             </td>
                         @elseif ($markingLeftStudentId === $student->id)
                             <td colspan="7">
@@ -154,10 +157,16 @@
                                 @error('returnedDate') <p class="field-error">{{ $message }}</p> @enderror
                             </td>
                         @else
-                            <td>{{ $student->pivot->seat_number }}</td>
                             <td>{{ $student->student_number }}</td>
                             <td>{{ $student->displayName() }}</td>
                             <td>{{ $student->gender }}</td>
+                            <td>
+                                @forelse ($student->schoolClasses as $schoolClass)
+                                    <span class="badge-neutral">{{ $schoolClass->shortLabel() }}</span>
+                                @empty
+                                    <span class="text-slate-400 dark:text-slate-500">未加入班級</span>
+                                @endforelse
+                            </td>
                             <td>
                                 @if ($student->currentDeparture)
                                     <span class="badge-neutral" title="{{ $student->currentDeparture->left_at->format('Y-m-d') }} 起轉出">
@@ -199,5 +208,9 @@
                 @endforeach
             </tbody>
         </table>
+    </div>
+
+    <div class="mt-4">
+        {{ $students->links() }}
     </div>
 </div>
