@@ -54,7 +54,7 @@ class StatusBoard extends Component
         $classes = SchoolClass::query()
             ->where('academic_year', $this->selectedAcademicYear)
             ->where('semester', $this->selectedSemester)
-            ->with(['students.user', 'attendanceSessions' => function ($query) {
+            ->with(['students.user', 'students.departures', 'attendanceSessions' => function ($query) {
                 // 這一天三個時段的 session 一次撈出來（不再只篩單一
                 // 時段），summarize() 自己依時段分組。
                 $query->where('date', $this->date)->with(['records.followUps']);
@@ -107,10 +107,12 @@ class StatusBoard extends Component
         return [
             'class' => $class,
             // 已轉出的學生不算進「應到」，但轉出當天算他還在讀，理由跟
-            // Recorder::students() 一樣——這裡是已經 eager load 好的
-            // Collection，用 filter() 而不是查詢層的 whereDate()。
+            // Recorder::students() 一樣，可能有好幾段轉出/轉入歷史，見
+            // Student::isEnrolledOn()——這裡是已經 eager load 好
+            // students.departures 的 Collection，用 filter() 而不是
+            // 查詢層的條件。
             'total' => $class->students->filter(
-                fn (Student $student) => is_null($student->left_at) || $student->left_at->toDateString() >= $this->date
+                fn (Student $student) => $student->isEnrolledOn($this->date)
             )->count(),
             'periods' => $periods,
             'exceptions' => $exceptions,

@@ -200,10 +200,17 @@ class Recorder extends Component
     }
 
     /**
-     * 已轉出的學生（見 Student::scopeActive()）不會再排進「目前」要點名
-     * 的名冊，但如果正在補登/更正的是他還在讀的那一天，還是要讓他出現
-     * ——不然轉學生離校前的點名紀錄就永遠改不了。轉出當天算他還在讀
-     * （當天可能上午還在校才辦轉學），從隔天開始才真正從名冊消失。
+     * 已轉出的學生（見 Student::isEnrolledOn()）不會再排進「目前」要
+     * 點名的名冊，但如果正在補登/更正的是他還在讀的那一天，還是要讓
+     * 他出現——不然轉學生離校前的點名紀錄就永遠改不了。轉出當天算他
+     * 還在讀（當天可能上午還在校才辦轉學），從隔天開始才真正從名冊
+     * 消失；如果他後來又轉入、甚至又轉出，每一段都各自獨立判斷，不會
+     * 因為後面的轉出覆蓋掉前面那段的邊界。
+     *
+     * whereDoesntHave 直接在查詢層排除，不是撈出全部學生再用
+     * isEnrolledOn() 篩選——這裡沒有像 StatusBoard 那樣「反正都已經
+     * eager load 好整個班級」的情況，一個班可能二三十個學生，用查詢層
+     * 過濾才不會多撈根本用不到的資料。
      */
     protected function students(): Collection
     {
@@ -212,8 +219,11 @@ class Recorder extends Component
         // 多發一次查詢。
         return $this->studentsCache ??= $this->schoolClass->students()
             ->with('user')
-            ->where(function ($query) {
-                $query->whereNull('left_at')->orWhereDate('left_at', '>=', $this->date);
+            ->whereDoesntHave('departures', function ($query) {
+                $query->whereDate('left_at', '<', $this->date)
+                    ->where(function ($query) {
+                        $query->whereNull('returned_at')->orWhereDate('returned_at', '>', $this->date);
+                    });
             })
             ->orderBySeatNumber()
             ->get();

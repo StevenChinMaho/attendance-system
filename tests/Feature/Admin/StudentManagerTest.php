@@ -6,6 +6,7 @@ use App\Livewire\Admin\StudentManager;
 use App\Models\AttendanceRecord;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\StudentDeparture;
 use App\Models\Teacher;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
@@ -208,7 +209,7 @@ class StudentManagerTest extends TestCase
     public function test_admin_can_mark_a_student_as_left_defaulting_to_today(): void
     {
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create(['left_at' => null]);
+        $student = Student::factory()->for($class, 'schoolClass')->create();
 
         Livewire::actingAs($this->admin())
             ->test(StudentManager::class, ['schoolClass' => $class])
@@ -217,7 +218,7 @@ class StudentManagerTest extends TestCase
             ->call('confirmMarkAsLeft')
             ->assertHasNoErrors();
 
-        $this->assertSame(now()->toDateString(), $student->fresh()->left_at->toDateString());
+        $this->assertSame(now()->toDateString(), $student->fresh()->currentDeparture->left_at->toDateString());
     }
 
     public function test_admin_can_manually_enter_a_past_date_when_marking_a_student_as_left(): void
@@ -225,7 +226,7 @@ class StudentManagerTest extends TestCase
         // 常見情境：admin 是事後才幫忙補標記，實際轉出日是過去某一天，
         // 不該一律等於「現在按下去的這一刻」。
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create(['left_at' => null]);
+        $student = Student::factory()->for($class, 'schoolClass')->create();
         $actualLeaveDate = now()->subMonth()->toDateString();
 
         Livewire::actingAs($this->admin())
@@ -235,13 +236,13 @@ class StudentManagerTest extends TestCase
             ->call('confirmMarkAsLeft')
             ->assertHasNoErrors();
 
-        $this->assertSame($actualLeaveDate, $student->fresh()->left_at->toDateString());
+        $this->assertSame($actualLeaveDate, $student->fresh()->currentDeparture->left_at->toDateString());
     }
 
     public function test_marking_as_left_requires_a_valid_date(): void
     {
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create(['left_at' => null]);
+        $student = Student::factory()->for($class, 'schoolClass')->create();
 
         Livewire::actingAs($this->admin())
             ->test(StudentManager::class, ['schoolClass' => $class])
@@ -250,26 +251,82 @@ class StudentManagerTest extends TestCase
             ->call('confirmMarkAsLeft')
             ->assertHasErrors('leftDate');
 
-        $this->assertNull($student->fresh()->left_at);
+        $this->assertNull($student->fresh()->currentDeparture);
     }
 
-    public function test_admin_can_restore_a_student_marked_as_left(): void
+    public function test_admin_can_restore_a_student_marked_as_left_with_a_manually_entered_date(): void
     {
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create(['left_at' => now()]);
+        $student = Student::factory()->for($class, 'schoolClass')->create();
+        StudentDeparture::factory()->for($student)->create(['left_at' => '2026-08-01', 'returned_at' => null]);
+        $returnDate = '2026-08-15';
 
         Livewire::actingAs($this->admin())
             ->test(StudentManager::class, ['schoolClass' => $class])
-            ->call('restoreStudent', $student->id);
+            ->call('startRestore', $student->id)
+            ->assertSet('returnedDate', now()->toDateString())
+            ->set('returnedDate', $returnDate)
+            ->call('confirmRestore')
+            ->assertHasNoErrors();
 
-        $this->assertNull($student->fresh()->left_at);
+        $fresh = $student->fresh();
+        $this->assertNull($fresh->currentDeparture);
+        $this->assertSame($returnDate, $fresh->departures()->latest()->first()->returned_at->toDateString());
+    }
+
+    public function test_restoring_rejects_a_return_date_before_the_departure_date(): void
+    {
+        $class = SchoolClass::factory()->create();
+        $student = Student::factory()->for($class, 'schoolClass')->create();
+        StudentDeparture::factory()->for($student)->create(['left_at' => '2026-08-15', 'returned_at' => null]);
+
+        Livewire::actingAs($this->admin())
+            ->test(StudentManager::class, ['schoolClass' => $class])
+            ->call('startRestore', $student->id)
+            ->set('returnedDate', '2026-08-01')
+            ->call('confirmRestore')
+            ->assertHasErrors('returnedDate');
+
+        $this->assertNotNull($student->fresh()->currentDeparture);
+    }
+
+    public function test_a_student_who_leaves_and_returns_multiple_times_keeps_every_period_separately(): void
+    {
+        // 這是這整個功能真正要處理的情境：轉出又轉入又轉出，每一段都要
+        // 各自完整保留，不能因為第二次轉出就把第一次那段的邊界洗掉。
+        $class = SchoolClass::factory()->create();
+        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $component = Livewire::actingAs($this->admin())
+            ->test(StudentManager::class, ['schoolClass' => $class]);
+
+        $component->call('startMarkAsLeft', $student->id)
+            ->set('leftDate', '2026-03-01')
+            ->call('confirmMarkAsLeft');
+
+        $component->call('startRestore', $student->id)
+            ->set('returnedDate', '2026-04-01')
+            ->call('confirmRestore');
+
+        $component->call('startMarkAsLeft', $student->id)
+            ->set('leftDate', '2026-06-01')
+            ->call('confirmMarkAsLeft');
+
+        $fresh = $student->fresh();
+        $this->assertCount(2, $fresh->departures);
+        $this->assertNotNull($fresh->currentDeparture);
+        $this->assertSame('2026-06-01', $fresh->currentDeparture->left_at->toDateString());
+
+        $fresh->load('departures');
+        $this->assertFalse($fresh->isEnrolledOn('2026-03-15'), '第一段轉出期間');
+        $this->assertTrue($fresh->isEnrolledOn('2026-04-15'), '兩段轉出中間');
+        $this->assertFalse($fresh->isEnrolledOn('2026-06-15'), '第二段轉出期間，還沒轉入');
     }
 
     public function test_a_student_from_another_class_cannot_be_marked_as_left_through_this_page(): void
     {
         $class = SchoolClass::factory()->create();
         $otherClass = SchoolClass::factory()->create();
-        $studentInOtherClass = Student::factory()->for($otherClass, 'schoolClass')->create(['left_at' => null]);
+        $studentInOtherClass = Student::factory()->for($otherClass, 'schoolClass')->create();
 
         $this->expectException(ModelNotFoundException::class);
 
@@ -283,13 +340,15 @@ class StudentManagerTest extends TestCase
     {
         $class = SchoolClass::factory()->create();
         $otherClass = SchoolClass::factory()->create();
-        $studentInOtherClass = Student::factory()->for($otherClass, 'schoolClass')->create(['left_at' => now()]);
+        $studentInOtherClass = Student::factory()->for($otherClass, 'schoolClass')->create();
+        StudentDeparture::factory()->for($studentInOtherClass, 'student')->create(['returned_at' => null]);
 
         $this->expectException(ModelNotFoundException::class);
 
         Livewire::actingAs($this->admin())
             ->test(StudentManager::class, ['schoolClass' => $class])
-            ->call('restoreStudent', $studentInOtherClass->id);
+            ->call('startRestore', $studentInOtherClass->id)
+            ->call('confirmRestore');
     }
 
     public function test_opening_the_mark_as_left_panel_while_editing_closes_the_edit_form(): void

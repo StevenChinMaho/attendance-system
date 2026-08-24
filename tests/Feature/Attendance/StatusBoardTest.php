@@ -7,6 +7,7 @@ use App\Livewire\Attendance\StatusBoard;
 use App\Livewire\Concerns\AttendancePeriods;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\StudentDeparture;
 use App\Models\Teacher;
 use App\Models\User;
 use App\Support\AcademicPeriod;
@@ -140,8 +141,9 @@ class StatusBoardTest extends TestCase
     public function test_a_student_who_left_before_today_is_excluded_from_the_expected_total(): void
     {
         $class = SchoolClass::factory()->create();
-        Student::factory()->for($class, 'schoolClass')->count(2)->create(['left_at' => null]);
-        Student::factory()->for($class, 'schoolClass')->create(['left_at' => now()->subDay()]);
+        Student::factory()->for($class, 'schoolClass')->count(2)->create();
+        $left = Student::factory()->for($class, 'schoolClass')->create();
+        StudentDeparture::factory()->for($left)->create(['left_at' => now()->subDay()->toDateString(), 'returned_at' => null]);
 
         $admin = User::factory()->create();
         $admin->assignRole('admin');
@@ -155,8 +157,9 @@ class StatusBoardTest extends TestCase
     public function test_a_student_who_left_today_still_counts_in_todays_expected_total(): void
     {
         $class = SchoolClass::factory()->create();
-        Student::factory()->for($class, 'schoolClass')->create(['left_at' => null]);
-        Student::factory()->for($class, 'schoolClass')->create(['left_at' => now()]);
+        Student::factory()->for($class, 'schoolClass')->create();
+        $left = Student::factory()->for($class, 'schoolClass')->create();
+        StudentDeparture::factory()->for($left)->create(['left_at' => now()->toDateString(), 'returned_at' => null]);
 
         $admin = User::factory()->create();
         $admin->assignRole('admin');
@@ -165,6 +168,30 @@ class StatusBoardTest extends TestCase
         $summary = $summaries->first(fn ($summary) => $summary['class']->is($class));
 
         $this->assertSame(2, $summary['total']);
+    }
+
+    public function test_expected_total_correctly_handles_multiple_separate_departure_periods(): void
+    {
+        // 轉出又轉入又轉出，兩段轉出期間各自都要正確地不算進應到人數，
+        // 中間轉入的那段要算回去——不能被第二段轉出覆蓋掉第一段的邊界。
+        $class = SchoolClass::factory()->create();
+        Student::factory()->for($class, 'schoolClass')->create();
+        $student = Student::factory()->for($class, 'schoolClass')->create();
+        StudentDeparture::factory()->for($student)->create(['left_at' => '2026-03-01', 'returned_at' => '2026-04-01']);
+        StudentDeparture::factory()->for($student)->create(['left_at' => '2026-06-01', 'returned_at' => null]);
+
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $totalOn = function (string $date) use ($admin, $class) {
+            $summaries = Livewire::actingAs($admin)->test(StatusBoard::class)->set('date', $date)->viewData('summaries');
+
+            return $summaries->first(fn ($summary) => $summary['class']->is($class))['total'];
+        };
+
+        $this->assertSame(1, $totalOn('2026-03-15'));
+        $this->assertSame(2, $totalOn('2026-04-15'));
+        $this->assertSame(1, $totalOn('2026-06-15'));
     }
 
     public function test_late_counts_as_present_and_early_leave_counts_as_absent(): void

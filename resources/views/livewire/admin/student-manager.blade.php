@@ -142,14 +142,25 @@
                                 <p class="field-hint">預設是今天，如果實際轉出是過去某一天，改成那一天即可——這會影響他在那之後的日子是否還會出現在點名名冊裡。</p>
                                 @error('leftDate') <p class="field-error">{{ $message }}</p> @enderror
                             </td>
+                        @elseif ($restoringStudentId === $student->id)
+                            <td colspan="7">
+                                <form wire:submit="confirmRestore" class="flex flex-wrap items-center gap-2">
+                                    <span class="text-sm text-slate-600 dark:text-slate-300">轉入日期：</span>
+                                    <input type="date" wire:model="returnedDate" class="field-input mt-0 py-1">
+                                    <button type="submit" class="btn-primary btn-xs">確認恢復在讀</button>
+                                    <button type="button" wire:click="cancelRestore" class="btn-secondary btn-xs">取消</button>
+                                </form>
+                                <p class="field-hint">預設是今天，如果實際轉入是過去某一天，改成那一天即可——同一個學生之後如果又轉出，這段期間會完整保留，不會互相覆蓋。</p>
+                                @error('returnedDate') <p class="field-error">{{ $message }}</p> @enderror
+                            </td>
                         @else
                             <td>{{ $student->seat_number }}</td>
                             <td>{{ $student->student_number }}</td>
                             <td>{{ $student->displayName() }}</td>
                             <td>{{ $student->gender }}</td>
                             <td>
-                                @if ($student->left_at)
-                                    <span class="badge-neutral" title="{{ $student->left_at->format('Y-m-d') }} 標記已轉出">
+                                @if ($student->currentDeparture)
+                                    <span class="badge-neutral" title="{{ $student->currentDeparture->left_at->format('Y-m-d') }} 起轉出">
                                         已轉出
                                     </span>
                                 @else
@@ -162,13 +173,8 @@
                                     <button type="button" wire:click="startEdit({{ $student->id }})" class="btn-secondary btn-xs">
                                         編輯
                                     </button>
-                                    @if ($student->left_at)
-                                        <button
-                                            type="button"
-                                            wire:click="restoreStudent({{ $student->id }})"
-                                            wire:confirm="確定要把「{{ $student->displayName() }}」恢復為在讀嗎？"
-                                            class="btn-secondary btn-xs"
-                                        >
+                                    @if ($student->currentDeparture)
+                                        <button type="button" wire:click="startRestore({{ $student->id }})" class="btn-secondary btn-xs">
                                             恢復在讀
                                         </button>
                                     @else

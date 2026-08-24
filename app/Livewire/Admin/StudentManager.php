@@ -37,11 +37,16 @@ class StudentManager extends Component
      * ——admin 很可能是事後才幫忙補標記，實際轉出日通常是過去某一天，
      * 而 Recorder/StatusBoard 排除已轉出學生的邏輯正是照這個日期判斷
      * 「補登哪些過去的日子還要讓他出現在名冊裡」，日期不準的話那個
-     * 邊界就會跟著錯。
+     * 邊界就會跟著錯。轉入（恢復在讀）同理，也要能手動輸入日期，見
+     * $restoringStudentId/$returnedDate。
      */
     public ?int $markingLeftStudentId = null;
 
     public string $leftDate = '';
+
+    public ?int $restoringStudentId = null;
+
+    public string $returnedDate = '';
 
     public function mount(SchoolClass $schoolClass): void
     {
@@ -104,6 +109,7 @@ class StudentManager extends Component
 
         $this->cancelEdit();
         $this->cancelMarkAsLeft();
+        $this->cancelRestore();
         $this->showCreateForm = true;
     }
 
@@ -130,6 +136,7 @@ class StudentManager extends Component
         // 表單同時顯示、共用同一組欄位屬性。
         $this->showCreateForm = false;
         $this->cancelMarkAsLeft();
+        $this->cancelRestore();
 
         $this->editingStudentId = $student->id;
         $this->studentNumber = $student->student_number;
@@ -172,6 +179,7 @@ class StudentManager extends Component
     {
         $this->showCreateForm = false;
         $this->cancelEdit();
+        $this->cancelRestore();
 
         $this->markingLeftStudentId = $student->id;
         $this->leftDate = now()->toDateString();
@@ -182,6 +190,10 @@ class StudentManager extends Component
      * 傳進來的 $student，理由跟 updateStudent() 一樣：即使 Livewire
      * 的隱含 model binding 解析出來的是真實存在的學生，也要再次確認
      * 這筆資料確實屬於目前這個班級，不是別班的學生 ID。
+     *
+     * 如果這個學生目前已經有一筆還沒結束的轉出期間（正常操作流程不該
+     * 發生，因為畫面上這時候按鈕會是「恢復在讀」），直接更新那筆的
+     * 轉出日期，而不是再開一筆新的、留下兩筆同時「開放」的期間。
      */
     public function confirmMarkAsLeft(): void
     {
@@ -189,7 +201,13 @@ class StudentManager extends Component
 
         $student = $this->schoolClass->students()->findOrFail($this->markingLeftStudentId);
 
-        $student->forceFill(['left_at' => $this->leftDate])->save();
+        $openDeparture = $student->departures()->whereNull('returned_at')->first();
+
+        if ($openDeparture) {
+            $openDeparture->update(['left_at' => $this->leftDate]);
+        } else {
+            $student->departures()->create(['left_at' => $this->leftDate]);
+        }
 
         $this->cancelMarkAsLeft();
 
@@ -202,21 +220,57 @@ class StudentManager extends Component
     }
 
     /**
-     * 恢復在讀不需要日期，直接清空 left_at 即可。
+     * 開啟「恢復在讀」的日期輸入面板——理由跟 startMarkAsLeft() 對稱：
+     * 轉入日同樣常常是過去某一天，不是操作當下，這個日期會決定
+     * Student::isEnrolledOn() 判斷「這段轉出期間到哪一天為止」。
      */
-    public function restoreStudent(Student $student): void
+    public function startRestore(Student $student): void
     {
-        $student = $this->schoolClass->students()->findOrFail($student->id);
+        $this->showCreateForm = false;
+        $this->cancelEdit();
+        $this->cancelMarkAsLeft();
 
-        $student->forceFill(['left_at' => null])->save();
+        $this->restoringStudentId = $student->id;
+        $this->returnedDate = now()->toDateString();
+    }
 
-        session()->flash('status', "學生「{$student->displayName()}」已恢復為在讀。");
+    public function confirmRestore(): void
+    {
+        $student = $this->schoolClass->students()->findOrFail($this->restoringStudentId);
+
+        $openDeparture = $student->departures()->whereNull('returned_at')->first();
+
+        // 正常操作流程不該發生（沒有開放期間時畫面上根本不會顯示「恢復
+        // 在讀」按鈕），但直接呼叫這個方法時還是要擋住，不要在沒有轉出
+        // 期間可以結束的情況下繼續往下驗證日期。
+        if (! $openDeparture) {
+            $this->cancelRestore();
+
+            return;
+        }
+
+        $this->validate([
+            'returnedDate' => ['required', 'date', 'after_or_equal:'.$openDeparture->left_at->toDateString()],
+        ], [
+            'returnedDate.after_or_equal' => '轉入日期不能早於轉出日期。',
+        ]);
+
+        $openDeparture->update(['returned_at' => $this->returnedDate]);
+
+        $this->cancelRestore();
+
+        session()->flash('status', "學生「{$student->displayName()}」已標記為 {$this->returnedDate} 恢復在讀。");
+    }
+
+    public function cancelRestore(): void
+    {
+        $this->reset(['restoringStudentId', 'returnedDate']);
     }
 
     /**
      * 只有從來沒有點名紀錄的學生才能真的刪除——真的轉學的學生幾乎一定
-     * 已經有點名紀錄，這種情況請用上面的 toggleLeft() 標記已轉出，不是
-     * 刪除。理由見 Student::hasAttendanceHistory()。
+     * 已經有點名紀錄，這種情況請用上面的 startMarkAsLeft() 標記已轉出，
+     * 不是刪除。理由見 Student::hasAttendanceHistory()。
      */
     public function deleteStudent(Student $student): void
     {
@@ -238,8 +292,13 @@ class StudentManager extends Component
         return view('livewire.admin.student-manager', [
             // withCount 而不是每一列各自呼叫 hasAttendanceHistory()：
             // 後者對這個班級的每個學生都會多發一次查詢，一個班二三十個
-            // 學生就是二三十次額外查詢，withCount 一次查完。
-            'students' => $this->schoolClass->students()->with('user')->withCount('attendanceRecords')->orderBySeatNumber()->get(),
+            // 學生就是二三十次額外查詢，withCount 一次查完。currentDeparture
+            // 同理 eager load，狀態欄要用它判斷「在讀」/「已轉出」。
+            'students' => $this->schoolClass->students()
+                ->with(['user', 'currentDeparture'])
+                ->withCount('attendanceRecords')
+                ->orderBySeatNumber()
+                ->get(),
             'availableUsers' => User::availableForLinking(exceptStudentId: $this->editingStudentId)
                 ->orderBy('name')
                 ->get(),

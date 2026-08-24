@@ -8,6 +8,7 @@ use App\Models\AttendanceRecord;
 use App\Models\AttendanceSession;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\StudentDeparture;
 use App\Models\Teacher;
 use App\Models\User;
 use App\Support\AcademicPeriod;
@@ -239,8 +240,9 @@ class RecorderTest extends TestCase
     public function test_a_student_marked_as_left_before_today_does_not_appear_in_todays_roster(): void
     {
         $class = SchoolClass::factory()->create();
-        $enrolled = Student::factory()->for($class, 'schoolClass')->create(['left_at' => null]);
-        $left = Student::factory()->for($class, 'schoolClass')->create(['left_at' => now()->subDay()]);
+        $enrolled = Student::factory()->for($class, 'schoolClass')->create();
+        $left = Student::factory()->for($class, 'schoolClass')->create();
+        StudentDeparture::factory()->for($left)->create(['left_at' => now()->subDay()->toDateString(), 'returned_at' => null]);
 
         $admin = User::factory()->create();
         $admin->assignRole('admin');
@@ -260,7 +262,8 @@ class RecorderTest extends TestCase
         // 轉出當天算他還在讀（當天可能上午還在校才辦轉學），要能繼續
         // 幫他點名，隔天才真正從名冊消失——見 Recorder::students()。
         $class = SchoolClass::factory()->create();
-        $left = Student::factory()->for($class, 'schoolClass')->create(['left_at' => now()]);
+        $left = Student::factory()->for($class, 'schoolClass')->create();
+        StudentDeparture::factory()->for($left)->create(['left_at' => now()->toDateString(), 'returned_at' => null]);
 
         $admin = User::factory()->create();
         $admin->assignRole('admin');
@@ -277,7 +280,8 @@ class RecorderTest extends TestCase
     public function test_a_student_who_left_appears_when_correcting_a_date_before_they_left(): void
     {
         $class = SchoolClass::factory()->create();
-        $left = Student::factory()->for($class, 'schoolClass')->create(['left_at' => now()->subDay()]);
+        $left = Student::factory()->for($class, 'schoolClass')->create();
+        StudentDeparture::factory()->for($left)->create(['left_at' => now()->subDay()->toDateString(), 'returned_at' => null]);
 
         $admin = User::factory()->create();
         $admin->assignRole('admin');
@@ -290,6 +294,29 @@ class RecorderTest extends TestCase
             ->all();
 
         $this->assertContains($left->id, $studentIds);
+    }
+
+    public function test_roster_correctly_excludes_a_student_across_multiple_separate_departure_periods(): void
+    {
+        // 轉出又轉入又轉出——同一個學生的第二段轉出不該覆蓋掉第一段的
+        // 邊界，兩段轉出期間、跟中間那段轉入期間都要各自判斷正確。
+        $class = SchoolClass::factory()->create();
+        $student = Student::factory()->for($class, 'schoolClass')->create();
+        StudentDeparture::factory()->for($student)->create(['left_at' => '2026-03-01', 'returned_at' => '2026-04-01']);
+        StudentDeparture::factory()->for($student)->create(['left_at' => '2026-06-01', 'returned_at' => null]);
+
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $component = Livewire::actingAs($admin)->test(Recorder::class, ['schoolClass' => $class]);
+
+        $duringFirstDeparture = $component->set('date', '2026-03-15')->viewData('students')->pluck('id')->all();
+        $duringReturn = $component->set('date', '2026-04-15')->viewData('students')->pluck('id')->all();
+        $duringSecondDeparture = $component->set('date', '2026-06-15')->viewData('students')->pluck('id')->all();
+
+        $this->assertNotContains($student->id, $duringFirstDeparture);
+        $this->assertContains($student->id, $duringReturn);
+        $this->assertNotContains($student->id, $duringSecondDeparture);
     }
 
     public function test_no_non_today_warning_is_shown_by_default(): void

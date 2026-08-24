@@ -11,23 +11,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
-// left_at 故意不放進 Fillable：轉出狀態只應該由 StudentManager 的
-// markAsLeft()/markAsActive() 用 forceFill() 明確設定（跟 User::
-// must_change_password 一樣的處理方式），不開放透過一般的
-// create()/update() 大量賦值意外帶到別的值。
 #[Fillable(['school_class_id', 'user_id', 'student_number', 'seat_number', 'name', 'gender'])]
 class Student extends Model
 {
     /** @use HasFactory<StudentFactory> */
     use HasFactory, HasLinkableAccountName, HasNaturalStringSort;
-
-    protected function casts(): array
-    {
-        return [
-            'left_at' => 'datetime',
-        ];
-    }
 
     public function schoolClass(): BelongsTo
     {
@@ -41,14 +31,43 @@ class Student extends Model
 
     /**
      * 轉學／畢業離校，不是刪除——attendance_records.student_id 是
-     * cascadeOnDelete，刪掉學生會連坐刪光他過去所有的點名紀錄。標記
-     * 已轉出的學生：歷史紀錄完整保留、學生管理列表上還看得到，但不會
-     * 再出現在 Recorder 每天要點名的名冊、StatusBoard 的應到人數裡
-     * （見 scopeActive()）。
+     * cascadeOnDelete，刪掉學生會連坐刪光他過去所有的點名紀錄。轉出/
+     * 轉入可能不只發生一次，每一段都各自是一筆 StudentDeparture，不是
+     * 一個會被覆蓋的單一欄位——見 App\Models\StudentDeparture 的說明。
      */
-    public function scopeActive(Builder $query): Builder
+    public function departures(): HasMany
     {
-        return $query->whereNull('left_at');
+        return $this->hasMany(StudentDeparture::class);
+    }
+
+    /**
+     * 目前尚未結束的轉出期間（returned_at 還是 null）——不是 null 就
+     * 代表這個學生現在算「已轉出」。用 hasOne（限定 whereNull）而不是
+     * 從 departures() 全部撈出來再篩選，讓 StudentManager 的列表可以
+     * 直接 eager load 這一筆，不用每一列各自查一次、也不用把全部歷史
+     * 期間都load 進來。
+     */
+    public function currentDeparture(): HasOne
+    {
+        return $this->hasOne(StudentDeparture::class)->whereNull('returned_at');
+    }
+
+    /**
+     * 這個學生在指定日期算不算在讀——因為轉出/轉入可能發生好幾次，不能
+     * 只看「現在」是不是已轉出，要看這個日期有沒有落在任何一段轉出期間
+     * 裡面。呼叫方要自己 eager load departures（Recorder/StatusBoard
+     * 都是整個班級一次 eager load，不是每個學生各自觸發一次查詢）。
+     *
+     * 轉出當天、轉入當天本身都算在讀（當天可能上午還在校才辦手續）：
+     * 「不在讀」的範圍是嚴格晚於 left_at、且早於 returned_at（如果還
+     * 沒 returned_at，代表這段期間還沒結束，範圍不設上限）。
+     */
+    public function isEnrolledOn(string $date): bool
+    {
+        return ! $this->departures->contains(
+            fn (StudentDeparture $departure) => $departure->left_at->toDateString() < $date
+                && (is_null($departure->returned_at) || $departure->returned_at->toDateString() > $date)
+        );
     }
 
     /**
