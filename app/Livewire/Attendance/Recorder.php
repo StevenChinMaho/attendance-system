@@ -199,12 +199,24 @@ class Recorder extends Component
             ->all();
     }
 
+    /**
+     * 已轉出的學生（見 Student::scopeActive()）不會再排進「目前」要點名
+     * 的名冊，但如果正在補登/更正的是他還在讀的那一天，還是要讓他出現
+     * ——不然轉學生離校前的點名紀錄就永遠改不了。轉出當天算他還在讀
+     * （當天可能上午還在校才辦轉學），從隔天開始才真正從名冊消失。
+     */
     protected function students(): Collection
     {
         // with('user')：Student::displayName()（見 blade 裡的名字欄）連結
         // 帳號時會讀 $this->user->name，沒有 eager load 每個學生都會各自
         // 多發一次查詢。
-        return $this->studentsCache ??= $this->schoolClass->students()->with('user')->orderBySeatNumber()->get();
+        return $this->studentsCache ??= $this->schoolClass->students()
+            ->with('user')
+            ->where(function ($query) {
+                $query->whereNull('left_at')->orWhereDate('left_at', '>=', $this->date);
+            })
+            ->orderBySeatNumber()
+            ->get();
     }
 
     /**

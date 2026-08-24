@@ -14,6 +14,12 @@
         </div>
     @endif
 
+    @if (session('error'))
+        <div class="alert-error mt-4">
+            {{ session('error') }}
+        </div>
+    @endif
+
     @if ($showCreateForm)
         <form wire:submit="createStudent" class="surface mt-6 grid grid-cols-2 gap-4 p-6">
             <div>
@@ -75,12 +81,13 @@
     <div class="table-wrap mt-6">
         <table class="data-table">
             <colgroup>
-                <col style="width: 10%">
-                <col style="width: 16%">
-                <col style="width: 22%">
-                <col style="width: 10%">
-                <col style="width: 22%">
-                <col style="width: 20%">
+                <col style="width: 8%">
+                <col style="width: 13%">
+                <col style="width: 17%">
+                <col style="width: 7%">
+                <col style="width: 12%">
+                <col style="width: 17%">
+                <col style="width: 26%">
             </colgroup>
             <thead>
                 <tr>
@@ -88,6 +95,7 @@
                     <th>學號</th>
                     <th>姓名</th>
                     <th>性別</th>
+                    <th>狀態</th>
                     <th>登入帳號</th>
                     <th></th>
                 </tr>
@@ -96,7 +104,7 @@
                 @foreach ($students as $student)
                     <tr>
                         @if ($editingStudentId === $student->id)
-                            <td colspan="6">
+                            <td colspan="7">
                                 <form wire:submit="updateStudent" class="flex flex-wrap items-center gap-2">
                                     <input type="text" wire:model="seatNumber" class="field-input mt-0 w-16 py-1">
                                     <input type="text" wire:model="studentNumber" class="field-input mt-0 w-24 py-1">
@@ -128,12 +136,39 @@
                             <td>{{ $student->student_number }}</td>
                             <td>{{ $student->displayName() }}</td>
                             <td>{{ $student->gender }}</td>
+                            <td>
+                                @if ($student->left_at)
+                                    <span class="badge-neutral" title="{{ $student->left_at->format('Y-m-d') }} 標記已轉出">
+                                        已轉出
+                                    </span>
+                                @else
+                                    <span class="badge-success">在讀</span>
+                                @endif
+                            </td>
                             <td>{{ $student->user?->username ?? '—' }}</td>
                             <td>
                                 <div class="action-group">
                                     <button type="button" wire:click="startEdit({{ $student->id }})" class="btn-secondary btn-xs">
                                         編輯
                                     </button>
+                                    <button
+                                        type="button"
+                                        wire:click="toggleLeft({{ $student->id }})"
+                                        wire:confirm="{{ $student->left_at ? "確定要把「{$student->displayName()}」恢復為在讀嗎？" : "確定要把「{$student->displayName()}」標記為已轉出嗎？之後不會再出現在點名名冊裡。" }}"
+                                        class="btn-secondary btn-xs"
+                                    >
+                                        {{ $student->left_at ? '恢復在讀' : '標記已轉出' }}
+                                    </button>
+                                    @if ($student->attendance_records_count === 0)
+                                        <button
+                                            type="button"
+                                            wire:click="deleteStudent({{ $student->id }})"
+                                            wire:confirm="確定要刪除學生「{{ $student->displayName() }}」嗎？此操作無法復原。"
+                                            class="btn-danger-ghost btn-xs"
+                                        >
+                                            刪除
+                                        </button>
+                                    @endif
                                 </div>
                             </td>
                         @endif

@@ -236,6 +236,62 @@ class RecorderTest extends TestCase
             ->assertRedirect(route('dashboard'));
     }
 
+    public function test_a_student_marked_as_left_before_today_does_not_appear_in_todays_roster(): void
+    {
+        $class = SchoolClass::factory()->create();
+        $enrolled = Student::factory()->for($class, 'schoolClass')->create(['left_at' => null]);
+        $left = Student::factory()->for($class, 'schoolClass')->create(['left_at' => now()->subDay()]);
+
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $studentIds = Livewire::actingAs($admin)
+            ->test(Recorder::class, ['schoolClass' => $class])
+            ->viewData('students')
+            ->pluck('id')
+            ->all();
+
+        $this->assertContains($enrolled->id, $studentIds);
+        $this->assertNotContains($left->id, $studentIds);
+    }
+
+    public function test_a_student_who_left_today_still_appears_in_todays_roster(): void
+    {
+        // 轉出當天算他還在讀（當天可能上午還在校才辦轉學），要能繼續
+        // 幫他點名，隔天才真正從名冊消失——見 Recorder::students()。
+        $class = SchoolClass::factory()->create();
+        $left = Student::factory()->for($class, 'schoolClass')->create(['left_at' => now()]);
+
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $studentIds = Livewire::actingAs($admin)
+            ->test(Recorder::class, ['schoolClass' => $class])
+            ->viewData('students')
+            ->pluck('id')
+            ->all();
+
+        $this->assertContains($left->id, $studentIds);
+    }
+
+    public function test_a_student_who_left_appears_when_correcting_a_date_before_they_left(): void
+    {
+        $class = SchoolClass::factory()->create();
+        $left = Student::factory()->for($class, 'schoolClass')->create(['left_at' => now()->subDay()]);
+
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $studentIds = Livewire::actingAs($admin)
+            ->test(Recorder::class, ['schoolClass' => $class])
+            ->set('date', now()->subDays(2)->toDateString())
+            ->viewData('students')
+            ->pluck('id')
+            ->all();
+
+        $this->assertContains($left->id, $studentIds);
+    }
+
     public function test_no_non_today_warning_is_shown_by_default(): void
     {
         $class = SchoolClass::factory()->create();

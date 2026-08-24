@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Models;
 
+use App\Models\AttendanceRecord;
 use App\Models\Student;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -45,5 +46,31 @@ class StudentTest extends TestCase
         ]);
 
         $this->assertSame('沒有帳號的學生', $student->displayName());
+    }
+
+    public function test_active_scope_excludes_students_marked_as_left(): void
+    {
+        $stillEnrolled = Student::factory()->create(['left_at' => null]);
+        $left = Student::factory()->create(['left_at' => now()]);
+
+        $activeIds = Student::active()->pluck('id')->all();
+
+        $this->assertContains($stillEnrolled->id, $activeIds);
+        $this->assertNotContains($left->id, $activeIds);
+    }
+
+    public function test_has_attendance_history_is_false_with_no_records(): void
+    {
+        $student = Student::factory()->create();
+
+        $this->assertFalse($student->hasAttendanceHistory());
+    }
+
+    public function test_has_attendance_history_is_true_once_a_record_exists(): void
+    {
+        $student = Student::factory()->create();
+        AttendanceRecord::factory()->for($student)->create();
+
+        $this->assertTrue($student->hasAttendanceHistory());
     }
 }

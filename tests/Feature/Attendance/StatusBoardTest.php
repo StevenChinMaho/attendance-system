@@ -137,6 +137,36 @@ class StatusBoardTest extends TestCase
             ->assertSee($class->shortLabel());
     }
 
+    public function test_a_student_who_left_before_today_is_excluded_from_the_expected_total(): void
+    {
+        $class = SchoolClass::factory()->create();
+        Student::factory()->for($class, 'schoolClass')->count(2)->create(['left_at' => null]);
+        Student::factory()->for($class, 'schoolClass')->create(['left_at' => now()->subDay()]);
+
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $summaries = Livewire::actingAs($admin)->test(StatusBoard::class)->viewData('summaries');
+        $summary = $summaries->first(fn ($summary) => $summary['class']->is($class));
+
+        $this->assertSame(2, $summary['total']);
+    }
+
+    public function test_a_student_who_left_today_still_counts_in_todays_expected_total(): void
+    {
+        $class = SchoolClass::factory()->create();
+        Student::factory()->for($class, 'schoolClass')->create(['left_at' => null]);
+        Student::factory()->for($class, 'schoolClass')->create(['left_at' => now()]);
+
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $summaries = Livewire::actingAs($admin)->test(StatusBoard::class)->viewData('summaries');
+        $summary = $summaries->first(fn ($summary) => $summary['class']->is($class));
+
+        $this->assertSame(2, $summary['total']);
+    }
+
     public function test_late_counts_as_present_and_early_leave_counts_as_absent(): void
     {
         // 看板把四種狀態併成「出席」（出席、遲到）跟「缺席」（缺席、

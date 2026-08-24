@@ -3,11 +3,13 @@
 namespace Tests\Feature\Admin;
 
 use App\Livewire\Admin\StudentManager;
+use App\Models\AttendanceRecord;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -201,6 +203,70 @@ class StudentManagerTest extends TestCase
             ->set('userId', $account->id)
             ->call('createStudent')
             ->assertHasErrors('userId');
+    }
+
+    public function test_admin_can_mark_a_student_as_left(): void
+    {
+        $class = SchoolClass::factory()->create();
+        $student = Student::factory()->for($class, 'schoolClass')->create(['left_at' => null]);
+
+        Livewire::actingAs($this->admin())
+            ->test(StudentManager::class, ['schoolClass' => $class])
+            ->call('toggleLeft', $student->id);
+
+        $this->assertNotNull($student->fresh()->left_at);
+    }
+
+    public function test_admin_can_restore_a_student_marked_as_left(): void
+    {
+        $class = SchoolClass::factory()->create();
+        $student = Student::factory()->for($class, 'schoolClass')->create(['left_at' => now()]);
+
+        Livewire::actingAs($this->admin())
+            ->test(StudentManager::class, ['schoolClass' => $class])
+            ->call('toggleLeft', $student->id);
+
+        $this->assertNull($student->fresh()->left_at);
+    }
+
+    public function test_a_student_from_another_class_cannot_be_marked_as_left_through_this_page(): void
+    {
+        $class = SchoolClass::factory()->create();
+        $otherClass = SchoolClass::factory()->create();
+        $studentInOtherClass = Student::factory()->for($otherClass, 'schoolClass')->create(['left_at' => null]);
+
+        $this->expectException(ModelNotFoundException::class);
+
+        Livewire::actingAs($this->admin())
+            ->test(StudentManager::class, ['schoolClass' => $class])
+            ->call('toggleLeft', $studentInOtherClass->id);
+    }
+
+    public function test_admin_can_delete_a_student_with_no_attendance_history(): void
+    {
+        $class = SchoolClass::factory()->create();
+        $student = Student::factory()->for($class, 'schoolClass')->create();
+
+        Livewire::actingAs($this->admin())
+            ->test(StudentManager::class, ['schoolClass' => $class])
+            ->call('deleteStudent', $student->id);
+
+        $this->assertModelMissing($student);
+    }
+
+    public function test_a_student_with_attendance_history_cannot_be_deleted(): void
+    {
+        // 真的轉學的學生幾乎一定已經有點名紀錄——這正是為什麼「轉出」
+        // 跟「刪除」必須是兩個獨立功能，見 Student::hasAttendanceHistory()。
+        $class = SchoolClass::factory()->create();
+        $student = Student::factory()->for($class, 'schoolClass')->create();
+        AttendanceRecord::factory()->for($student)->create();
+
+        Livewire::actingAs($this->admin())
+            ->test(StudentManager::class, ['schoolClass' => $class])
+            ->call('deleteStudent', $student->id);
+
+        $this->assertModelExists($student);
     }
 
     public function test_opening_the_create_form_while_editing_closes_the_edit_form(): void

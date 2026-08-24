@@ -6,6 +6,7 @@ use App\Livewire\Concerns\AttendancePeriods;
 use App\Livewire\Concerns\ScopesToSelectedAcademicPeriod;
 use App\Models\AttendanceRecord;
 use App\Models\SchoolClass;
+use App\Models\Student;
 use Illuminate\Support\Collection;
 use Livewire\Component;
 
@@ -105,7 +106,12 @@ class StatusBoard extends Component
 
         return [
             'class' => $class,
-            'total' => $class->students->count(),
+            // 已轉出的學生不算進「應到」，但轉出當天算他還在讀，理由跟
+            // Recorder::students() 一樣——這裡是已經 eager load 好的
+            // Collection，用 filter() 而不是查詢層的 whereDate()。
+            'total' => $class->students->filter(
+                fn (Student $student) => is_null($student->left_at) || $student->left_at->toDateString() >= $this->date
+            )->count(),
             'periods' => $periods,
             'exceptions' => $exceptions,
         ];

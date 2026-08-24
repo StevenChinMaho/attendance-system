@@ -149,10 +149,49 @@ class StudentManager extends Component
         $this->reset(['editingStudentId', 'studentNumber', 'seatNumber', 'name', 'gender', 'userId']);
     }
 
+    /**
+     * 轉學／畢業離校用——不是刪除，見 Student::scopeActive() 的說明。
+     * 用 $this->schoolClass->students()->findOrFail() 而不是直接信任
+     * 傳進來的 $student，理由跟 updateStudent() 一樣：即使 Livewire
+     * 的隱含 model binding 解析出來的是真實存在的學生，也要再次確認
+     * 這筆資料確實屬於目前這個班級，不是別班的學生 ID。
+     */
+    public function toggleLeft(Student $student): void
+    {
+        $student = $this->schoolClass->students()->findOrFail($student->id);
+
+        $student->forceFill([
+            'left_at' => $student->left_at ? null : now(),
+        ])->save();
+    }
+
+    /**
+     * 只有從來沒有點名紀錄的學生才能真的刪除——真的轉學的學生幾乎一定
+     * 已經有點名紀錄，這種情況請用上面的 toggleLeft() 標記已轉出，不是
+     * 刪除。理由見 Student::hasAttendanceHistory()。
+     */
+    public function deleteStudent(Student $student): void
+    {
+        $student = $this->schoolClass->students()->findOrFail($student->id);
+
+        if ($student->hasAttendanceHistory()) {
+            session()->flash('error', "學生「{$student->displayName()}」已經有點名紀錄，為保留歷史紀錄無法刪除，請改用「標記已轉出」。");
+
+            return;
+        }
+
+        $student->delete();
+
+        session()->flash('status', "學生「{$student->displayName()}」已刪除。");
+    }
+
     public function render()
     {
         return view('livewire.admin.student-manager', [
-            'students' => $this->schoolClass->students()->with('user')->orderBySeatNumber()->get(),
+            // withCount 而不是每一列各自呼叫 hasAttendanceHistory()：
+            // 後者對這個班級的每個學生都會多發一次查詢，一個班二三十個
+            // 學生就是二三十次額外查詢，withCount 一次查完。
+            'students' => $this->schoolClass->students()->with('user')->withCount('attendanceRecords')->orderBySeatNumber()->get(),
             'availableUsers' => User::availableForLinking(exceptStudentId: $this->editingStudentId)
                 ->orderBy('name')
                 ->get(),
