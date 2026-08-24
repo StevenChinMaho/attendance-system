@@ -10,7 +10,18 @@
     <div class="surface mt-6 flex flex-wrap items-end gap-4 p-4">
         <div>
             <label class="block text-xs font-medium text-slate-500 dark:text-slate-400">日期</label>
-            <input type="date" wire:model.live="date" class="field-input mt-1 py-1.5">
+            <div class="mt-1 flex items-center gap-1.5">
+                <input type="date" wire:model.live="date" class="field-input mt-0 py-1.5">
+                {{-- 補登/更正過去的點名紀錄是合理的操作，但切換日期後容易
+                     忘記自己不在點今天的名，尤其送出後畫面看起來跟平常
+                     點名沒有兩樣——跟學年度／學期的「非本學期」提示同一個
+                     理由，見 App\Support\AcademicPeriod::isSelectedCurrent()。 --}}
+                @unless ($date === now()->toDateString())
+                    <span class="badge-warning whitespace-nowrap" title="今天是 {{ now()->format('Y-m-d') }}">
+                        ⚠ 非本日
+                    </span>
+                @endunless
+            </div>
         </div>
 
         <div class="flex gap-2">

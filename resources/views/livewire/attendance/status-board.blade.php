@@ -15,7 +15,17 @@
 
         <div>
             <label class="block text-xs font-medium text-slate-500 dark:text-slate-400">日期</label>
-            <input type="date" wire:model.live="date" class="field-input mt-1 py-1.5">
+            <div class="mt-1 flex items-center gap-1.5">
+                <input type="date" wire:model.live="date" class="field-input mt-0 py-1.5">
+                {{-- 這個看板本來就是查「某一天」的點名狀況，切到別天很正常，
+                     但一樣容易忘記自己不是在看今天——跟學年度／學期的
+                     「非本學期」提示同一個理由。 --}}
+                @unless ($date === now()->toDateString())
+                    <span class="badge-warning whitespace-nowrap" title="今天是 {{ now()->format('Y-m-d') }}">
+                        ⚠ 非本日
+                    </span>
+                @endunless
+            </div>
         </div>
     </div>
 

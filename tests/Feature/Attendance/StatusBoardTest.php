@@ -74,6 +74,27 @@ class StatusBoardTest extends TestCase
             ->assertDontSee('非本學期');
     }
 
+    public function test_no_non_today_warning_is_shown_by_default(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        Livewire::actingAs($admin)
+            ->test(StatusBoard::class)
+            ->assertDontSee('非本日');
+    }
+
+    public function test_a_non_today_warning_is_shown_after_switching_to_a_different_date(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        Livewire::actingAs($admin)
+            ->test(StatusBoard::class)
+            ->set('date', now()->subDay()->toDateString())
+            ->assertSee('非本日');
+    }
+
     public function test_a_non_current_period_warning_is_shown_after_switching_away(): void
     {
         // 即時看板是每天會一直盯著看的頁面，停留在別的學期卻沒發現特別

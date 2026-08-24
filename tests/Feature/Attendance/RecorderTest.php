@@ -236,6 +236,31 @@ class RecorderTest extends TestCase
             ->assertRedirect(route('dashboard'));
     }
 
+    public function test_no_non_today_warning_is_shown_by_default(): void
+    {
+        $class = SchoolClass::factory()->create();
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        Livewire::actingAs($admin)
+            ->test(Recorder::class, ['schoolClass' => $class])
+            ->assertDontSee('非本日');
+    }
+
+    public function test_a_non_today_warning_is_shown_after_switching_to_a_different_date(): void
+    {
+        // 補登/更正過去的點名紀錄是合理操作，但切換日期後容易忘記自己
+        // 不是在點今天的名，尤其送出後畫面看起來跟平常點名沒有兩樣。
+        $class = SchoolClass::factory()->create();
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        Livewire::actingAs($admin)
+            ->test(Recorder::class, ['schoolClass' => $class])
+            ->set('date', now()->subDay()->toDateString())
+            ->assertSee('非本日');
+    }
+
     public function test_defaults_to_present_for_everyone_when_no_session_exists_yet(): void
     {
         $class = SchoolClass::factory()->create();
