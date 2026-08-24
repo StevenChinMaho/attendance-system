@@ -72,6 +72,13 @@ Route::middleware(['auth', EnsureAccountIsActive::class, EnsureUserHasChangedPas
     // 某個班級底下。
     Route::view('/admin/students', 'admin.students')->middleware('can:students.manage')->name('admin.students');
 
+    // 批量匯入是獨立頁面而不是學生管理裡的一個面板：學校匯出的檔案是
+    // 「全校」的，一次會動到多個班級的名冊，而且流程本身是上傳→預覽
+    // →確認三步，塞進列表頁只會兩邊都難用。
+    Route::view('/admin/students/import', 'admin.students.import')
+        ->middleware('can:students.manage')
+        ->name('admin.students.import');
+
     // Route::view 不支援隱含路由模型綁定；closure route 又無法被
     // route:cache 序列化，正式環境跑 optimize 會直接炸掉，所以用
     // invokable controller 兩邊都顧到。這個路由現在指向「班級名單」

@@ -13,9 +13,14 @@
                 ，要把學生加入／移出某個班級，請到「班級管理」個別班級的「管理學生」。
             </p>
         </div>
-        <button type="button" wire:click="toggleCreateForm" class="btn-primary">
-            {{ $showCreateForm ? '取消' : '新增學生' }}
-        </button>
+        <div class="action-group">
+            <a href="{{ route('admin.students.import') }}" class="btn-secondary">
+                批量匯入
+            </a>
+            <button type="button" wire:click="toggleCreateForm" class="btn-primary">
+                {{ $showCreateForm ? '取消' : '新增學生' }}
+            </button>
+        </div>
     </div>
 
     @if (session('status'))
