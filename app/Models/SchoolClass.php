@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable(['academic_year', 'semester', 'grade', 'class_number', 'homeroom_teacher_id'])]
@@ -30,17 +31,28 @@ class SchoolClass extends Model
     }
 
     /**
-     * 每學年度的班級都是獨立紀錄，升學年時直接改學生的 school_class_id
-     * 指向新班級，不會沿用/覆蓋這一筆——見 system_structure.md 學年制度。
+     * 每學年度的班級都是獨立紀錄——見 system_structure.md 學年制度。
      */
     public function homeroomTeacher(): BelongsTo
     {
         return $this->belongsTo(Teacher::class, 'homeroom_teacher_id');
     }
 
-    public function students(): HasMany
+    /**
+     * 學生跟班級是多對多，不是單一 school_class_id——同一個真實學生
+     * 從入學到畢業自始至終只有一筆 students 資料，但在校期間會歷經
+     * 好幾個班級（每學期一個）。不需要額外記錄日期區間：每一筆
+     * school_classes 本身就已經綁定特定學年度／學期，時間資訊已經包含
+     * 在那筆紀錄裡了，「升學年」就是多連一筆到新學期的班級，完全不用
+     * 動舊班級那筆連結，舊班級的名單也就永遠原封不動留著。
+     *
+     * 座號（seat_number）放在中間表 school_class_student 上，不是
+     * students 表——座號是「這個學生在這個班的座號」，同一個學生在不同
+     * 班級座號本來就可能不一樣。
+     */
+    public function students(): BelongsToMany
     {
-        return $this->hasMany(Student::class);
+        return $this->belongsToMany(Student::class)->withPivot('seat_number')->withTimestamps();
     }
 
     public function attendanceSessions(): HasMany

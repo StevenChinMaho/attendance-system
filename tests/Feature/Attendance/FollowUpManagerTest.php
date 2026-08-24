@@ -30,7 +30,7 @@ class FollowUpManagerTest extends TestCase
 
     private function absentRecordFor(SchoolClass $schoolClass): AttendanceRecord
     {
-        $student = Student::factory()->for($schoolClass, 'schoolClass')->create();
+        $student = Student::factory()->forClass($schoolClass)->create();
         $session = AttendanceSession::factory()->for($schoolClass, 'schoolClass')->create();
 
         return AttendanceRecord::factory()->for($session, 'attendanceSession')->create([
@@ -113,7 +113,7 @@ class FollowUpManagerTest extends TestCase
 
         $repUser = User::factory()->create();
         $repUser->assignRole('student_rep');
-        Student::factory()->for($class, 'schoolClass')->create(['user_id' => $repUser->id]);
+        Student::factory()->forClass($class)->create(['user_id' => $repUser->id]);
 
         Livewire::actingAs($repUser)
             ->test(FollowUpManager::class, ['record' => $record])

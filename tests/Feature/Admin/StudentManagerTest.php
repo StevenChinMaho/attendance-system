@@ -65,16 +65,17 @@ class StudentManagerTest extends TestCase
             ->call('createStudent')
             ->assertHasNoErrors();
 
-        $this->assertDatabaseHas('students', [
+        $this->assertDatabaseHas('students', ['name' => '陳小明']);
+        $this->assertDatabaseHas('school_class_student', [
             'school_class_id' => $class->id,
-            'name' => '陳小明',
+            'seat_number' => '1',
         ]);
     }
 
     public function test_duplicate_student_number_within_the_same_class_fails_validation(): void
     {
         $class = SchoolClass::factory()->create();
-        Student::factory()->for($class, 'schoolClass')->create(['student_number' => '10001']);
+        Student::factory()->forClass($class)->create(['student_number' => '10001']);
 
         Livewire::actingAs($this->admin())
             ->test(StudentManager::class, ['schoolClass' => $class])
@@ -89,7 +90,7 @@ class StudentManagerTest extends TestCase
     public function test_duplicate_seat_number_within_the_same_class_fails_validation(): void
     {
         $class = SchoolClass::factory()->create();
-        Student::factory()->for($class, 'schoolClass')->create(['seat_number' => '1']);
+        Student::factory()->forClass($class, '1')->create();
 
         Livewire::actingAs($this->admin())
             ->test(StudentManager::class, ['schoolClass' => $class])
@@ -107,7 +108,7 @@ class StudentManagerTest extends TestCase
         // 到畢業自始至終只有一筆 students 資料，不該有兩個不同班級、不同
         // 學生共用同一個學號的情況。
         $otherClass = SchoolClass::factory()->create();
-        Student::factory()->for($otherClass, 'schoolClass')->create(['student_number' => '10001']);
+        Student::factory()->forClass($otherClass)->create(['student_number' => '10001']);
 
         $class = SchoolClass::factory()->create();
 
@@ -196,7 +197,7 @@ class StudentManagerTest extends TestCase
     {
         $class = SchoolClass::factory()->create();
         $account = User::factory()->create();
-        Student::factory()->for($class, 'schoolClass')->create(['user_id' => $account->id]);
+        Student::factory()->forClass($class)->create(['user_id' => $account->id]);
 
         Livewire::actingAs($this->admin())
             ->test(StudentManager::class, ['schoolClass' => $class])
@@ -212,7 +213,7 @@ class StudentManagerTest extends TestCase
     public function test_admin_can_mark_a_student_as_left_defaulting_to_today(): void
     {
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $student = Student::factory()->forClass($class)->create();
 
         Livewire::actingAs($this->admin())
             ->test(StudentManager::class, ['schoolClass' => $class])
@@ -229,7 +230,7 @@ class StudentManagerTest extends TestCase
         // 常見情境：admin 是事後才幫忙補標記，實際轉出日是過去某一天，
         // 不該一律等於「現在按下去的這一刻」。
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $student = Student::factory()->forClass($class)->create();
         $actualLeaveDate = now()->subMonth()->toDateString();
 
         Livewire::actingAs($this->admin())
@@ -245,7 +246,7 @@ class StudentManagerTest extends TestCase
     public function test_marking_as_left_requires_a_valid_date(): void
     {
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $student = Student::factory()->forClass($class)->create();
 
         Livewire::actingAs($this->admin())
             ->test(StudentManager::class, ['schoolClass' => $class])
@@ -260,7 +261,7 @@ class StudentManagerTest extends TestCase
     public function test_admin_can_restore_a_student_marked_as_left_with_a_manually_entered_date(): void
     {
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $student = Student::factory()->forClass($class)->create();
         StudentDeparture::factory()->for($student)->create(['left_at' => '2026-08-01', 'returned_at' => null]);
         $returnDate = '2026-08-15';
 
@@ -280,7 +281,7 @@ class StudentManagerTest extends TestCase
     public function test_restoring_rejects_a_return_date_before_the_departure_date(): void
     {
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $student = Student::factory()->forClass($class)->create();
         StudentDeparture::factory()->for($student)->create(['left_at' => '2026-08-15', 'returned_at' => null]);
 
         Livewire::actingAs($this->admin())
@@ -298,7 +299,7 @@ class StudentManagerTest extends TestCase
         // 這是這整個功能真正要處理的情境：轉出又轉入又轉出，每一段都要
         // 各自完整保留，不能因為第二次轉出就把第一次那段的邊界洗掉。
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $student = Student::factory()->forClass($class)->create();
         $component = Livewire::actingAs($this->admin())
             ->test(StudentManager::class, ['schoolClass' => $class]);
 
@@ -329,7 +330,7 @@ class StudentManagerTest extends TestCase
     {
         $class = SchoolClass::factory()->create();
         $otherClass = SchoolClass::factory()->create();
-        $studentInOtherClass = Student::factory()->for($otherClass, 'schoolClass')->create();
+        $studentInOtherClass = Student::factory()->forClass($otherClass)->create();
 
         $this->expectException(ModelNotFoundException::class);
 
@@ -343,7 +344,7 @@ class StudentManagerTest extends TestCase
     {
         $class = SchoolClass::factory()->create();
         $otherClass = SchoolClass::factory()->create();
-        $studentInOtherClass = Student::factory()->for($otherClass, 'schoolClass')->create();
+        $studentInOtherClass = Student::factory()->forClass($otherClass)->create();
         StudentDeparture::factory()->for($studentInOtherClass, 'student')->create(['returned_at' => null]);
 
         $this->expectException(ModelNotFoundException::class);
@@ -357,7 +358,7 @@ class StudentManagerTest extends TestCase
     public function test_opening_the_mark_as_left_panel_while_editing_closes_the_edit_form(): void
     {
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $student = Student::factory()->forClass($class)->create();
 
         Livewire::actingAs($this->admin())
             ->test(StudentManager::class, ['schoolClass' => $class])
@@ -371,7 +372,7 @@ class StudentManagerTest extends TestCase
     public function test_admin_can_delete_a_student_with_no_attendance_history(): void
     {
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $student = Student::factory()->forClass($class)->create();
 
         Livewire::actingAs($this->admin())
             ->test(StudentManager::class, ['schoolClass' => $class])
@@ -385,7 +386,7 @@ class StudentManagerTest extends TestCase
         // 真的轉學的學生幾乎一定已經有點名紀錄——這正是為什麼「轉出」
         // 跟「刪除」必須是兩個獨立功能，見 Student::hasAttendanceHistory()。
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $student = Student::factory()->forClass($class)->create();
         AttendanceRecord::factory()->for($student)->create();
 
         Livewire::actingAs($this->admin())
@@ -402,7 +403,7 @@ class StudentManagerTest extends TestCase
         // 著，輸入內容看起來會互相同步，實際上是同一個屬性被兩邊的
         // 輸入框綁定。
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create(['student_number' => '10001']);
+        $student = Student::factory()->forClass($class)->create(['student_number' => '10001']);
 
         Livewire::actingAs($this->admin())
             ->test(StudentManager::class, ['schoolClass' => $class])
@@ -420,8 +421,8 @@ class StudentManagerTest extends TestCase
         // 表單會沿用正在編輯那位學生的學號／座號，同一班內撞到 unique
         // 限制直接噴 500，而不是正常顯示驗證錯誤。
         $class = SchoolClass::factory()->create();
-        $existing = Student::factory()->for($class, 'schoolClass')->create([
-            'student_number' => '10001', 'seat_number' => '1', 'name' => '正在編輯的學生',
+        $existing = Student::factory()->forClass($class, '1')->create([
+            'student_number' => '10001', 'name' => '正在編輯的學生',
         ]);
 
         Livewire::actingAs($this->admin())

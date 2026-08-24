@@ -34,7 +34,7 @@ class RecorderTest extends TestCase
     {
         $rep = User::factory()->create();
         $rep->assignRole('student_rep');
-        Student::factory()->for($schoolClass, 'schoolClass')->create(['user_id' => $rep->id]);
+        Student::factory()->forClass($schoolClass)->create(['user_id' => $rep->id]);
 
         return $rep;
     }
@@ -68,7 +68,7 @@ class RecorderTest extends TestCase
     public function test_student_rep_can_view_their_own_classes_attendance_page(): void
     {
         $class = SchoolClass::factory()->create();
-        Student::factory()->for($class, 'schoolClass')->create(['name' => '陳小明']);
+        Student::factory()->forClass($class)->create(['name' => '陳小明']);
         $rep = $this->studentRepFor($class);
 
         $this->actingAs($rep)
@@ -240,8 +240,8 @@ class RecorderTest extends TestCase
     public function test_a_student_marked_as_left_before_today_does_not_appear_in_todays_roster(): void
     {
         $class = SchoolClass::factory()->create();
-        $enrolled = Student::factory()->for($class, 'schoolClass')->create();
-        $left = Student::factory()->for($class, 'schoolClass')->create();
+        $enrolled = Student::factory()->forClass($class)->create();
+        $left = Student::factory()->forClass($class)->create();
         StudentDeparture::factory()->for($left)->create(['left_at' => now()->subDay()->toDateString(), 'returned_at' => null]);
 
         $admin = User::factory()->create();
@@ -262,7 +262,7 @@ class RecorderTest extends TestCase
         // 轉出當天算他還在讀（當天可能上午還在校才辦轉學），要能繼續
         // 幫他點名，隔天才真正從名冊消失——見 Recorder::students()。
         $class = SchoolClass::factory()->create();
-        $left = Student::factory()->for($class, 'schoolClass')->create();
+        $left = Student::factory()->forClass($class)->create();
         StudentDeparture::factory()->for($left)->create(['left_at' => now()->toDateString(), 'returned_at' => null]);
 
         $admin = User::factory()->create();
@@ -280,7 +280,7 @@ class RecorderTest extends TestCase
     public function test_a_student_who_left_appears_when_correcting_a_date_before_they_left(): void
     {
         $class = SchoolClass::factory()->create();
-        $left = Student::factory()->for($class, 'schoolClass')->create();
+        $left = Student::factory()->forClass($class)->create();
         StudentDeparture::factory()->for($left)->create(['left_at' => now()->subDay()->toDateString(), 'returned_at' => null]);
 
         $admin = User::factory()->create();
@@ -301,7 +301,7 @@ class RecorderTest extends TestCase
         // 轉出又轉入又轉出——同一個學生的第二段轉出不該覆蓋掉第一段的
         // 邊界，兩段轉出期間、跟中間那段轉入期間都要各自判斷正確。
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $student = Student::factory()->forClass($class)->create();
         StudentDeparture::factory()->for($student)->create(['left_at' => '2026-03-01', 'returned_at' => '2026-04-01']);
         StudentDeparture::factory()->for($student)->create(['left_at' => '2026-06-01', 'returned_at' => null]);
 
@@ -347,7 +347,7 @@ class RecorderTest extends TestCase
     public function test_defaults_to_present_for_everyone_when_no_session_exists_yet(): void
     {
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $student = Student::factory()->forClass($class)->create();
         $admin = User::factory()->create();
         $admin->assignRole('admin');
 
@@ -359,7 +359,7 @@ class RecorderTest extends TestCase
     public function test_submit_creates_a_session_and_records_for_every_student(): void
     {
         $class = SchoolClass::factory()->create();
-        $students = Student::factory()->for($class, 'schoolClass')->count(3)->create();
+        $students = Student::factory()->forClass($class)->count(3)->create();
         $admin = User::factory()->create();
         $admin->assignRole('admin');
 
@@ -383,7 +383,7 @@ class RecorderTest extends TestCase
     public function test_resubmitting_the_same_period_updates_the_existing_session_instead_of_duplicating(): void
     {
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $student = Student::factory()->forClass($class)->create();
         $admin = User::factory()->create();
         $admin->assignRole('admin');
 
@@ -399,7 +399,7 @@ class RecorderTest extends TestCase
     public function test_reopening_an_already_submitted_session_loads_its_saved_statuses(): void
     {
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $student = Student::factory()->forClass($class)->create();
         $admin = User::factory()->create();
         $admin->assignRole('admin');
 
@@ -418,7 +418,7 @@ class RecorderTest extends TestCase
     public function test_switching_period_loads_a_different_sessions_statuses(): void
     {
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $student = Student::factory()->forClass($class)->create();
         $admin = User::factory()->create();
         $admin->assignRole('admin');
 
@@ -437,7 +437,7 @@ class RecorderTest extends TestCase
         // 那一刻檢查一次；Recorder::boot() 是專門補這個洞的第二層檢查，
         // 這裡驗證它真的每次互動請求都會重跑，不是只在第一次 mount 生效。
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $student = Student::factory()->forClass($class)->create();
         $rep = $this->studentRepFor($class);
 
         $component = Livewire::actingAs($rep)
@@ -458,10 +458,10 @@ class RecorderTest extends TestCase
         // 請求理論上可以夾帶任意 key。submit() 必須只信任伺服器端查出來的
         // 班級名單，不能直接把 $statuses 的每個 key 都當成合法學生寫入。
         $class = SchoolClass::factory()->create(['grade' => 1]);
-        Student::factory()->for($class, 'schoolClass')->create();
+        Student::factory()->forClass($class)->create();
 
         $otherClass = SchoolClass::factory()->create(['grade' => 2]);
-        $foreignStudent = Student::factory()->for($otherClass, 'schoolClass')->create();
+        $foreignStudent = Student::factory()->forClass($otherClass)->create();
 
         $admin = User::factory()->create();
         $admin->assignRole('admin');
@@ -477,7 +477,7 @@ class RecorderTest extends TestCase
     public function test_marking_a_student_absent_is_recorded_in_the_activity_log(): void
     {
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $student = Student::factory()->forClass($class)->create();
         $admin = User::factory()->create();
         $admin->assignRole('admin');
 
@@ -500,7 +500,7 @@ class RecorderTest extends TestCase
         // 全班第一次點名、大家都出席是例行狀態，不是需要留意的例外，
         // 不應該每天都在稽核紀錄裡留下 30 筆「出席」的雜訊。
         $class = SchoolClass::factory()->create();
-        Student::factory()->for($class, 'schoolClass')->count(3)->create();
+        Student::factory()->forClass($class)->count(3)->create();
         $admin = User::factory()->create();
         $admin->assignRole('admin');
 
@@ -514,7 +514,7 @@ class RecorderTest extends TestCase
     public function test_correcting_an_already_recorded_status_is_logged_with_old_and_new_values(): void
     {
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $student = Student::factory()->forClass($class)->create();
         $admin = User::factory()->create();
         $admin->assignRole('admin');
 
@@ -533,8 +533,8 @@ class RecorderTest extends TestCase
     public function test_follow_up_section_only_shows_for_non_present_students_to_authorized_roles(): void
     {
         $class = SchoolClass::factory()->create();
-        $present = Student::factory()->for($class, 'schoolClass')->create(['name' => '出席同學']);
-        $absent = Student::factory()->for($class, 'schoolClass')->create(['name' => '缺席同學']);
+        $present = Student::factory()->forClass($class)->create(['name' => '出席同學']);
+        $absent = Student::factory()->forClass($class)->create(['name' => '缺席同學']);
 
         $teacherUser = User::factory()->create();
         $teacherUser->assignRole('homeroom_teacher');
@@ -559,7 +559,7 @@ class RecorderTest extends TestCase
         // 導師先把學生記成缺席、留了處理情形，後來查證其實有到、把狀態
         // 改回出席——之前留的紀錄不該因此從畫面上完全消失不見。
         $class = SchoolClass::factory()->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create();
+        $student = Student::factory()->forClass($class)->create();
 
         $teacherUser = User::factory()->create();
         $teacherUser->assignRole('homeroom_teacher');

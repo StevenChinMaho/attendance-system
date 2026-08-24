@@ -72,7 +72,7 @@
                 @foreach ($students as $student)
                     @php $record = $sessionRecords->get($student->id); @endphp
                     <tr>
-                        <td class="align-top">{{ $student->seat_number }}</td>
+                        <td class="align-top">{{ $student->pivot->seat_number }}</td>
                         <td class="align-top">{{ $student->displayName() }}</td>
                         <td class="align-top">
                             <select wire:model="statuses.{{ $student->id }}" class="field-input mt-0 py-1">

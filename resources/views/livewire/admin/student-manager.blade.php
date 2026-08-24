@@ -154,7 +154,7 @@
                                 @error('returnedDate') <p class="field-error">{{ $message }}</p> @enderror
                             </td>
                         @else
-                            <td>{{ $student->seat_number }}</td>
+                            <td>{{ $student->pivot->seat_number }}</td>
                             <td>{{ $student->student_number }}</td>
                             <td>{{ $student->displayName() }}</td>
                             <td>{{ $student->gender }}</td>

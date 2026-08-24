@@ -127,7 +127,7 @@ class StatusBoardTest extends TestCase
     public function test_a_class_with_no_sessions_for_the_day_shows_every_period_as_not_submitted(): void
     {
         $class = SchoolClass::factory()->create();
-        Student::factory()->for($class, 'schoolClass')->count(3)->create();
+        Student::factory()->forClass($class)->count(3)->create();
 
         $admin = User::factory()->create();
         $admin->assignRole('admin');
@@ -141,8 +141,8 @@ class StatusBoardTest extends TestCase
     public function test_a_student_who_left_before_today_is_excluded_from_the_expected_total(): void
     {
         $class = SchoolClass::factory()->create();
-        Student::factory()->for($class, 'schoolClass')->count(2)->create();
-        $left = Student::factory()->for($class, 'schoolClass')->create();
+        Student::factory()->forClass($class)->count(2)->create();
+        $left = Student::factory()->forClass($class)->create();
         StudentDeparture::factory()->for($left)->create(['left_at' => now()->subDay()->toDateString(), 'returned_at' => null]);
 
         $admin = User::factory()->create();
@@ -157,8 +157,8 @@ class StatusBoardTest extends TestCase
     public function test_a_student_who_left_today_still_counts_in_todays_expected_total(): void
     {
         $class = SchoolClass::factory()->create();
-        Student::factory()->for($class, 'schoolClass')->create();
-        $left = Student::factory()->for($class, 'schoolClass')->create();
+        Student::factory()->forClass($class)->create();
+        $left = Student::factory()->forClass($class)->create();
         StudentDeparture::factory()->for($left)->create(['left_at' => now()->toDateString(), 'returned_at' => null]);
 
         $admin = User::factory()->create();
@@ -175,8 +175,8 @@ class StatusBoardTest extends TestCase
         // 轉出又轉入又轉出，兩段轉出期間各自都要正確地不算進應到人數，
         // 中間轉入的那段要算回去——不能被第二段轉出覆蓋掉第一段的邊界。
         $class = SchoolClass::factory()->create();
-        Student::factory()->for($class, 'schoolClass')->create();
-        $student = Student::factory()->for($class, 'schoolClass')->create();
+        Student::factory()->forClass($class)->create();
+        $student = Student::factory()->forClass($class)->create();
         StudentDeparture::factory()->for($student)->create(['left_at' => '2026-03-01', 'returned_at' => '2026-04-01']);
         StudentDeparture::factory()->for($student)->create(['left_at' => '2026-06-01', 'returned_at' => null]);
 
@@ -205,10 +205,10 @@ class StatusBoardTest extends TestCase
         $teacher = Teacher::factory()->create(['user_id' => $teacherUser->id]);
         $class->update(['homeroom_teacher_id' => $teacher->id]);
 
-        $late = Student::factory()->for($class, 'schoolClass')->create(['name' => '遲到同學']);
-        $earlyLeave = Student::factory()->for($class, 'schoolClass')->create(['name' => '早退同學']);
-        $absent = Student::factory()->for($class, 'schoolClass')->create(['name' => '缺席同學']);
-        $present = Student::factory()->for($class, 'schoolClass')->create(['name' => '出席同學']);
+        $late = Student::factory()->forClass($class)->create(['name' => '遲到同學']);
+        $earlyLeave = Student::factory()->forClass($class)->create(['name' => '早退同學']);
+        $absent = Student::factory()->forClass($class)->create(['name' => '缺席同學']);
+        $present = Student::factory()->forClass($class)->create(['name' => '出席同學']);
 
         $period = AttendancePeriods::current();
 
@@ -249,7 +249,7 @@ class StatusBoardTest extends TestCase
         $teacher = Teacher::factory()->create(['user_id' => $teacherUser->id]);
         $class->update(['homeroom_teacher_id' => $teacher->id]);
 
-        $student = Student::factory()->for($class, 'schoolClass')->create(['name' => '缺席同學']);
+        $student = Student::factory()->forClass($class)->create(['name' => '缺席同學']);
 
         $session = $class->attendanceSessions()->create([
             'date' => now()->toDateString(),

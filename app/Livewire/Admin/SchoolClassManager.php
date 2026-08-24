@@ -206,10 +206,11 @@ class SchoolClassManager extends Component
     }
 
     /**
-     * 只有完全沒有學生、也從來沒有點過名的班級才能刪——
-     * students.school_class_id／attendance_sessions.school_class_id 都是
-     * cascadeOnDelete，真的執行下去會連同這個班級的學生名冊、點名紀錄、
-     * 處理情形一起整串刪光，對一個已經在用的班級來說是毀滅性的操作。
+     * 只有完全沒有學生、也從來沒有點過名的班級才能刪。學生跟班級是多對多
+     * （school_class_student 中間表 cascadeOnDelete），刪除班級不會連坐
+     * 刪掉學生本體，只會拆掉這筆連結——但 attendance_sessions.school_class_id
+     * 仍然是 cascadeOnDelete，真的執行下去會連同這個班級的點名紀錄、
+     * 處理情形一起整串刪光，對一個已經在用的班級來說還是毀滅性的操作。
      * 這個限制只用來清掉「建錯的空班級」，不是用來清掉舊學年度的班級
      * ——舊班級即使已經沒有在點名，學生名冊跟歷史紀錄還是要保留。
      */

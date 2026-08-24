@@ -267,7 +267,7 @@ class SchoolClassManagerTest extends TestCase
     public function test_a_class_with_students_cannot_be_deleted(): void
     {
         $class = SchoolClass::factory()->create();
-        Student::factory()->for($class, 'schoolClass')->create();
+        Student::factory()->forClass($class)->create();
 
         Livewire::actingAs($this->admin())
             ->test(SchoolClassManager::class)

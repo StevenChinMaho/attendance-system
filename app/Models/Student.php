@@ -10,18 +10,23 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-#[Fillable(['school_class_id', 'user_id', 'student_number', 'seat_number', 'name', 'gender'])]
+#[Fillable(['user_id', 'student_number', 'name', 'gender'])]
 class Student extends Model
 {
     /** @use HasFactory<StudentFactory> */
     use HasFactory, HasLinkableAccountName, HasNaturalStringSort;
 
-    public function schoolClass(): BelongsTo
+    /**
+     * 見 SchoolClass::students() 的說明——多對多，座號放在中間表的
+     * pivot 上（$student->schoolClasses()->find($id)->pivot->seat_number）。
+     */
+    public function schoolClasses(): BelongsToMany
     {
-        return $this->belongsTo(SchoolClass::class);
+        return $this->belongsToMany(SchoolClass::class)->withPivot('seat_number')->withTimestamps();
     }
 
     public function attendanceRecords(): HasMany
@@ -102,8 +107,14 @@ class Student extends Model
         return 'name';
     }
 
+    /**
+     * 只能透過已經 join 過中間表的查詢呼叫（例如
+     * $schoolClass->students()->orderBySeatNumber()）——座號在
+     * school_class_student 這張中間表上，不是 students 自己的欄位，
+     * 沒有 join 的話這個欄位不存在，查詢會直接失敗。
+     */
     public function scopeOrderBySeatNumber(Builder $query): Builder
     {
-        return $this->scopeNaturalSortBy($query, 'seat_number');
+        return $this->scopeNaturalSortBy($query, 'school_class_student.seat_number');
     }
 }

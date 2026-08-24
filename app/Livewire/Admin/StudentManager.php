@@ -71,9 +71,14 @@ class StudentManager extends Component
             ],
             'seatNumber' => [
                 'required', 'string', 'max:255',
-                Rule::unique('students', 'seat_number')
+                // 座號現在放在 school_class_student 中間表上（見
+                // SchoolClass::students() 的說明）——ignore() 用
+                // student_id 這欄比對，不是這張表自己的 id，因為呼叫方
+                // 手上有的是「正在編輯的學生」，不是「正在編輯的那筆
+                // 連結」。
+                Rule::unique('school_class_student', 'seat_number')
                     ->where('school_class_id', $this->schoolClass->id)
-                    ->ignore($this->editingStudentId),
+                    ->ignore($this->editingStudentId, 'student_id'),
             ],
             'name' => [$this->userId ? 'nullable' : 'required', 'string', 'max:255'],
             'gender' => ['required', 'in:男,女'],
@@ -118,13 +123,14 @@ class StudentManager extends Component
     {
         $this->validate();
 
+        // BelongsToMany::create() 的第二個參數是 pivot 欄位——座號要跟著
+        // 這筆新連結一起寫進 school_class_student，不是 students 本身。
         $student = $this->schoolClass->students()->create([
             'student_number' => $this->studentNumber,
-            'seat_number' => $this->seatNumber,
             'name' => Student::resolveName($this->userId, $this->name),
             'gender' => $this->gender,
             'user_id' => $this->userId,
-        ]);
+        ], ['seat_number' => $this->seatNumber]);
 
         $this->reset(['studentNumber', 'seatNumber', 'name', 'gender', 'userId', 'showCreateForm']);
 
@@ -139,9 +145,16 @@ class StudentManager extends Component
         $this->cancelMarkAsLeft();
         $this->cancelRestore();
 
+        // 用 $this->schoolClass->students()->findOrFail() 重新查一次而
+        // 不是直接信任傳進來的 $student：一來理由跟 updateStudent() 一樣
+        // （確認這筆資料確實屬於目前這個班級），二來只有透過這個關聯
+        // 查出來的 model 才會帶著 pivot 屬性，直接用 route model binding
+        // 解析出來的 $student 不會有 pivot（座號）可以讀。
+        $student = $this->schoolClass->students()->findOrFail($student->id);
+
         $this->editingStudentId = $student->id;
         $this->studentNumber = $student->student_number;
-        $this->seatNumber = $student->seat_number;
+        $this->seatNumber = $student->pivot->seat_number;
         $this->name = $student->name;
         $this->gender = $student->gender;
         $this->userId = $student->user_id;
@@ -154,11 +167,15 @@ class StudentManager extends Component
         $student = $this->schoolClass->students()->findOrFail($this->editingStudentId);
         $student->update([
             'student_number' => $this->studentNumber,
-            'seat_number' => $this->seatNumber,
             'name' => Student::resolveName($this->userId, $this->name),
             'gender' => $this->gender,
             'user_id' => $this->userId,
         ]);
+
+        // 座號是 school_class_student 中間表上的 pivot 欄位，不在
+        // students 本身，updateExistingPivot() 只更新這筆連結的座號，
+        // 不會動到學生本體或其他班級的連結。
+        $this->schoolClass->students()->updateExistingPivot($student->id, ['seat_number' => $this->seatNumber]);
 
         $this->cancelEdit();
 

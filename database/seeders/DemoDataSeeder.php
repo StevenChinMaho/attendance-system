@@ -82,12 +82,12 @@ class DemoDataSeeder extends Seeder
         ]);
 
         // 前面幾個是一般學生，最後一個是副班長、連結登入帳號。
-        Student::factory()->for($class, 'schoolClass')->count(7)->create();
+        Student::factory()->forClass($class)->count(7)->create();
 
         $repUser = User::factory()->create(['username' => $repUsername]);
         $repUser->assignRole('student_rep');
 
-        Student::factory()->for($class, 'schoolClass')->create([
+        Student::factory()->forClass($class)->create([
             'name' => $repUser->name,
             'user_id' => $repUser->id,
         ]);

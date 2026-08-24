@@ -72,10 +72,12 @@ class User extends Authenticatable
     }
 
     /**
-     * 這個帳號名下所有的班級：副班長最多一筆（一個帳號只能連結一個
-     * 學生身份），導師則可能同時或跨學年帶過不只一個班（`teachers.id`
-     * 對 `school_classes.homeroom_teacher_id` 是一對多），其他角色
-     * （例如 admin）沒有固定班級、回傳空集合。
+     * 這個帳號名下所有的班級：副班長跟導師現在是同一種形狀——一個帳號
+     * 只能連結一個學生身份（見 UserAccountIsUnlinked），但那個學生本身
+     * 在校期間會歷經好幾個班級（`Student::schoolClasses()` 是多對多，
+     * 見 SchoolClass::students() 的說明），導師則可能同時或跨學年帶過
+     * 不只一個班（`teachers.id` 對 `school_classes.homeroom_teacher_id`
+     * 是一對多）。其他角色（例如 admin）沒有固定班級、回傳空集合。
      *
      * 「使用者名下有哪些班級」只在這裡實作一次——nav bar 的班級選單、
      * GoToMyClassAttendanceController、SchoolClassPolicy/AttendanceRecordPolicy
@@ -86,7 +88,13 @@ class User extends Authenticatable
     public function ownSchoolClasses(): Collection
     {
         if ($this->student) {
-            return $this->student->schoolClass ? collect([$this->student->schoolClass]) : collect();
+            // 排序邏輯跟下面的導師分支一致：「現在」所屬的班放最前面，
+            // 給只需要單一班級的呼叫點（ownSchoolClass()）用。
+            return $this->student->schoolClasses()
+                ->orderByDesc('academic_year')
+                ->orderByDesc('semester')
+                ->orderByClassNumber()
+                ->get();
         }
 
         if ($this->teacher) {
