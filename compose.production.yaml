@@ -1,0 +1,144 @@
+# 正式環境的 compose 檔。跟開發用的 compose.yaml 完全獨立，不共用
+# 任何設定——Sail 那份是給本機開發的（bind mount 整個專案、對外開
+# port、帶著 xdebug），不能拿來對外服務（見 system_structure.md）。
+#
+# 使用方式：兩個旗標都不能省，詳細操作見 DEPLOYMENT.md。
+#
+#   docker compose --env-file .env.production -f compose.production.yaml up -d
+#
+#   -f          避免不小心跑到 Sail 那份 compose.yaml。
+#   --env-file  下面 mariadb / cloudflared 區塊裡的 ${...} 是 **compose
+#               自己的變數插值**，它預設只讀專案目錄下的 .env，不會去讀
+#               各服務的 env_file:。少了這個旗標，那些變數會是空的，
+#               而 `:?` 語法會讓 compose 直接報錯停下來——這是刻意的，
+#               比起用空密碼把資料庫跑起來要好得多。
+#
+# DEPLOYMENT.md 裡有把這串包成 shell 函式的作法，日常不需要每次手打。
+#
+# 最重要的一個設計：**沒有任何一個服務對 host 發佈 port**。
+# 對外流量的唯一入口是 cloudflared 主動建立的 outbound tunnel，
+# 所以從網際網路（甚至從校內網路）掃這台主機，看不到任何開放的服務。
+# 這也是 bootstrap/app.php 裡 trustProxies(at: '*') 之所以安全的前提：
+# 能把請求送進 app 容器的，只有下面這個內部網路裡的 web 與 cloudflared。
+
+# 專案名稱必須跟開發用的 Sail 區隔開。compose 預設拿目錄名稱當專案名，
+# 而 Sail 的 compose.yaml 沒有指定 name，所以兩邊都會是 attendance-system
+# ——結果是在同一台機器上跑這份檔案時，compose 會認為 Sail 那個
+# attendance-system-mariadb-1 就是「這個專案的 mariadb 服務」，直接把它
+# 用正式環境的設定重建掉，開發環境當場壞掉（實測踩過，Sail 的資料庫
+# 容器被接管、laravel.test 連不上資料庫）。
+name: attendance-system-production
+
+services:
+    app:
+        build:
+            context: .
+            dockerfile: docker/production/Dockerfile
+            target: runtime
+        image: attendance-system/app:latest
+        restart: unless-stopped
+        env_file:
+            - .env.production
+        depends_on:
+            mariadb:
+                condition: service_healthy
+        networks:
+            - internal
+        security_opt:
+            - no-new-privileges:true
+
+    web:
+        build:
+            context: .
+            dockerfile: docker/production/Dockerfile
+            target: web
+        image: attendance-system/web:latest
+        restart: unless-stopped
+        depends_on:
+            - app
+        networks:
+            - internal
+        security_opt:
+            - no-new-privileges:true
+        environment:
+            # 只給下面的 healthcheck 用。bootstrap/app.php 的 trustHosts()
+            # 只接受 APP_URL 指定的主機名，健康檢查必須帶對 Host 標頭，
+            # 否則會被 Symfony 擋成 400（不是 200，也不是連不上，
+            # 光看 unhealthy 很難聯想到原因）。
+            APP_URL: '${APP_URL:?APP_URL 必須設定}'
+        healthcheck:
+            # /up 是 Laravel 內建的健康檢查路由（見 bootstrap/app.php 的
+            # health: '/up'）。這一條會實際打穿 nginx → php-fpm → Laravel
+            # → 資料庫，比單純檢查 process 還活著有意義得多。
+            #
+            # 兩個細節都是實測踩出來的：
+            #   * 一定要用 127.0.0.1，不能用 localhost。nginx.conf 只有
+            #     `listen 80`（IPv4），而 busybox 的 wget 會先試 ::1，
+            #     結果是 connection refused、健康檢查永遠不會通過，
+            #     連帶 cloudflared 因為 depends_on service_healthy 而
+            #     永遠不啟動——整站起不來，但每個容器看起來都在跑。
+            #   * $$ 是給 compose 的跳脫，容器裡看到的是單一個 $；
+            #     ${APP_URL#*://} 把 https:// 去掉只留主機名。
+            # （整串一定要用單引號包起來：裡面的 `Host: ` 有冒號加空白，
+            #   不引號的話 YAML 會把它當成巢狀 mapping 而拒絕載入。）
+            test:
+                - CMD-SHELL
+                - 'wget -qO- --header="Host: $${APP_URL#*://}" http://127.0.0.1/up > /dev/null || exit 1'
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 60s
+
+    mariadb:
+        image: mariadb:12.3
+        restart: unless-stopped
+        environment:
+            MARIADB_ROOT_PASSWORD: '${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD 必須設定}'
+            MARIADB_DATABASE: '${DB_DATABASE:?DB_DATABASE 必須設定}'
+            MARIADB_USER: '${DB_USERNAME:?DB_USERNAME 必須設定}'
+            MARIADB_PASSWORD: '${DB_PASSWORD:?DB_PASSWORD 必須設定}'
+            # 之後把上面的 image 標籤升到新版時，自動跑 mariadb-upgrade，
+            # 不必手動進容器處理。
+            MARIADB_AUTO_UPGRADE: '1'
+        volumes:
+            - db-data:/var/lib/mysql
+        networks:
+            - internal
+        security_opt:
+            - no-new-privileges:true
+        healthcheck:
+            test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
+            interval: 10s
+            timeout: 5s
+            retries: 10
+            start_period: 30s
+
+    cloudflared:
+        # 刻意釘死版本而不是用 :latest。這是整個站台的對外入口，
+        # 某次 `docker compose pull` 撈到破壞性變更就是全站無預警中斷，
+        # 而且事後很難判斷「到底是什麼變了」。要升級是改這一行的事，
+        # 但那應該是一個你主動做的決定。
+        image: cloudflare/cloudflared:2026.8.2
+        restart: unless-stopped
+        # --no-autoupdate：容器裡的自動更新會繞過上面釘版本的用意，
+        # 而且更新後 cloudflared 會自我重啟，等於在無人值守時換版本。
+        command: tunnel --no-autoupdate run
+        environment:
+            TUNNEL_TOKEN: '${TUNNEL_TOKEN:?TUNNEL_TOKEN 必須設定}'
+        depends_on:
+            web:
+                condition: service_healthy
+        networks:
+            - internal
+        security_opt:
+            - no-new-privileges:true
+
+networks:
+    internal:
+        driver: bridge
+
+volumes:
+    # 整個系統唯一有狀態的地方。除了這個 volume 之外，所有容器都是
+    # 可以隨時砍掉重建的——這也是備份只需要顧這一個對象的原因。
+    db-data:
+        driver: local

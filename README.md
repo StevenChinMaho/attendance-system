@@ -56,7 +56,10 @@ cp .env.example .env          # 第一次 clone 才需要
 
 ## 生產環境部署
 
-生產環境**不使用 Sail**，改用最小化的 Docker 部署並透過 `cloudflared` 對外公開，詳見 [system_structure.md](system_structure.md) 的「生產環境部署」章節。
+生產環境**不使用 Sail**，改用最小化的 Docker 部署（`compose.production.yaml`）並透過 `cloudflared` 對外公開，四個容器都不對 host 發佈任何 port。
+
+- 從零建置、日常維運、套用更新、疑難排解：**[DEPLOYMENT.md](DEPLOYMENT.md)**
+- 為什麼這樣設計：[system_structure.md](system_structure.md) 的「生產環境部署」章節
 
 ## 安全性
 

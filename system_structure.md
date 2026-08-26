@@ -32,9 +32,9 @@
 4. **點名核心功能**（已完成）：`attendance_sessions`、`attendance_records`，股長/導師的點名操作介面、`SchoolClassPolicy`／`AttendanceRecordPolicy` 的範圍限制（依 `User::ownSchoolClasses()` 判斷「這個班在不在名下清單裡」，支援一帳號帶不只一班）。
 5. **處理情形與稽核**（已完成）：`attendance_follow_ups`，串接 `spatie/laravel-activitylog` 記錄狀態異動歷程。
 6. **即時狀態看板**（已完成）：全校班級點名進度/缺席名單的 Dashboard（`wire:poll` 輪詢更新），依角色顯示不同內容——導師/管理者看全校總覽，學生看簡單歡迎頁。
-7. **正式環境部署**（未開始）：最小化 Docker 映像、cloudflared 設定、上線前的資安複查。
+7. **正式環境部署**（已完成）：最小化 Docker 映像（多階段建置，最終映像不含 node／composer／編譯器／dev 依賴）、cloudflared 設定、上線前的資安複查。實際操作步驟見 [DEPLOYMENT.md](DEPLOYMENT.md)。
 
-所有功能性開發階段（1~6）已完成，目前只剩部署階段。共用導覽列（`<x-nav-bar>`）在階段 4~5 之間補上，取代原本散落在各頁面的連結。
+所有開發階段（1~7）皆已完成。共用導覽列（`<x-nav-bar>`）在階段 4~5 之間補上，取代原本散落在各頁面的連結。
 
 每個階段開始前，先確認 [system_structure.md](system_structure.md) 裡對應的資料庫設計與業務規則沒有遺漏的疑問，避免中途發現設計缺口要回頭改 schema。
 
@@ -52,11 +52,33 @@
 
 在遠端ubuntu server上也使用docker部署，使用docker cloudflared公開至網路，不可使用在生產環境使用laravel sail運行，須保證輕量、最小攻擊面等。
 
+**實際的建置／維運／更新步驟全部寫在 [DEPLOYMENT.md](DEPLOYMENT.md)**，這一節只記錄設計決策與理由。
+
+## 架構
+
+四個容器：`app`（php-fpm，自建映像）、`web`（nginx，自建映像）、`mariadb`、`cloudflared`。設定檔在 [compose.production.yaml](compose.production.yaml) 與 [docker/production/](docker/production/)，跟 Sail 的 `compose.yaml` 完全獨立、不共用任何東西。
+
+- **沒有任何容器對 host 發佈 port。** 對外流量的唯一入口是 cloudflared 主動建立的 outbound tunnel，所以從網際網路掃這台主機看不到任何開放服務，防火牆也不需要為這個系統開任何一條規則。這同時是 `bootstrap/app.php` 裡 `trustProxies(at: '*')` 之所以安全的前提——能把請求送進 app 容器的只有內部網路裡的 web 與 cloudflared，而容器 IP 每次重建都會變，寫死反而會在某次重啟後靜默失效。
+- **映像是三階段建置**：`assets`（node，編 Tailwind／Vite）→ `vendor`（composer `--no-dev`）→ `runtime`。node、composer、編譯器、dev 依賴都不會出現在最終映像裡（app 約 235MB、web 約 93MB）。
+- **程式碼與 vendor 在容器裡對 PHP 是唯讀的**：複製進映像時刻意不加 `--chown`，所以檔案是 root 所有而 php-fpm 以 www-data 執行；唯二開放寫入的是 `storage/` 與 `bootstrap/cache/`。萬一應用層被找到任意寫入漏洞，攻擊者也沒辦法把 web shell 寫進 `public/` 或竄改既有 PHP 檔案取得持續性。
+- **不需要 Redis、queue worker 或 cron 容器**：session／cache／queue 全部走 `database` driver，而專案裡沒有任何 `ShouldQueue` 的 job、Mail／Notification 或排程。這是查證過的現況，不是省略——如果未來加了背景工作，正式環境不會有東西去執行它，必須同步補上對應服務（見 DEPLOYMENT.md 第 6.6 節）。
+- **`cloudflare/cloudflared` 刻意釘死版本，不用 `:latest`**：它是整個站台的對外入口，`:latest` 沒有任何相容性承諾，某次 `pull` 撈到破壞性變更就是全站無預警中斷且難以追查。其餘三個標籤（`php:8.5-fpm-alpine`／`nginx:stable-alpine`／`mariadb:12.3`）是在修補版本內滾動，拿可重現性換安全更新是划算的。
+- **`compose.production.yaml` 的 `name:` 不能拿掉**：compose 預設拿目錄名稱當專案名，而 Sail 的 `compose.yaml` 沒有指定 name，兩邊都會是 `attendance-system`。實測結果是在開發機上跑正式 compose 時，它會認定 Sail 的 mariadb 容器就是「這個專案的 mariadb」而直接用正式環境的設定重建掉，開發環境當場壞掉。
+
+## 為了上線而修掉的兩個實際缺陷
+
+這兩項不是設定調整，是原本就存在、但只有在正式環境才會顯現的 bug：
+
+- **沒有設定 trusted proxies。** 隔著三層代理時 Laravel 會把「最後一跳」當成客戶端，造成 `LoginController::throttleKey()`（`username|$request->ip()`）對全校塌縮成同一組 key——任何人在某個帳號上打錯 5 次密碼，就會把那個帳號從所有地點一起鎖住，而這是系統唯一的暴力破解防線；同時 `isSecure()` 會是 false，讓 session cookie 的 secure 旗標與 `route()`／`url()` 產生的絕對網址都退回 http。已在 `bootstrap/app.php` 補上 `trustProxies()` 與 `trustHosts()`，並用 `tests/Feature/TrustedProxiesTest.php` 釘住行為。
+- **`DatabaseSeeder` 會在正式環境生出密碼已知的管理員。** `User::factory()->create(['username' => 'admin'])` 原本在環境判斷之外，而 `UserFactory` 的密碼寫死是 `password`（且 factory 依賴 require-dev 的 faker，`--no-dev` 安裝時反而會直接 fatal——兩種結果都是錯的）。現在那段被移進 `local`/`testing` 判斷內，正式環境改用 `php artisan admin:create`（`App\Console\Commands\CreateAdminUser`）建立第一個管理者：密碼當場互動輸入（不接受參數傳入，那會留在 shell history 與 `ps` 輸出裡），並沿用既有的 `must_change_password` 機制要求本人首次登入時自行更換。
+
 ## 上線前資安檢查清單（對應開發守則「權限認證必須謹慎檢查」）
+
+可以逐條照做的指令版本在 [DEPLOYMENT.md 第 8 節](DEPLOYMENT.md)，以下是每一項的理由。
 
 - `.env` 的 `APP_DEBUG` 必須是 `false`、`APP_ENV` 是 `production`——目前開發環境是 `true`，這是故意的（本機除錯用），部署時務必翻成 `false`。這是最容易被忽略、也最嚴重的一項：`APP_DEBUG=true` 時任何未攔截的例外（包含單純打錯網址、方法不對的 404/405）都會回傳完整的除錯頁面，內含檔案路徑、程式碼片段、環境變數，等於把原始碼結構跟部分機密設定直接攤開給任何路過的訪客看。
 - 登入端點已有頻率限制（同一組帳號＋IP 一分鐘 5 次密碼錯誤鎖住，見上方「帳號與權限設計」），不需要額外處理，但部署後建議實際測試一次確認生效環境相同。
-- Session／Cookie 設定（`config/session.php`）在 HTTPS 環境下應確認 `secure` 為真、`same_site` 合理，避免 cookie 透過明文 HTTP 外洩。
+- Session／Cookie 設定（`config/session.php`）在 HTTPS 環境下應確認 `secure` 為真、`same_site` 合理，避免 cookie 透過明文 HTTP 外洩。`.env.production.example` 已經把 `SESSION_SECURE_COOKIE=true` 明確寫死，不倚賴 Laravel 自行判斷「這是不是 HTTPS 請求」——雖然 `trustProxies` 補上之後那個判斷本來就會正確，但這個值錯掉的後果是 session cookie 可能以明文傳輸，兩層都做比較安全。同一個檔案也明確指定了 `SESSION_COOKIE`：不指定的話 `config/session.php` 會用 `Str::slug(APP_NAME)."_session"` 推導，而 `APP_NAME` 是純中文時 slug 會是空字串、cookie 名稱變成 `_session`——能動，但那是巧合，且日後有人改了 `APP_NAME` 就會無聲換成另一個名字讓所有人被登出。
 - 確認沒有裝或啟用 `laravel/telescope`、`laravel/pulse` 之類會暴露除錯／效能資訊的套件對外開放（目前專案未安裝，維持現狀即可）。
 - 手動或用工具（例如簡單的路徑清單）掃過一輪，確認任意猜測的網址（含方法不對的請求，例如對一個只有 GET 的路徑送 POST）頂多得到乾淨的 404／405／419，不會噴出未經處理的例外或洩漏路由以外的資訊。
 

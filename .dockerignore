@@ -1,0 +1,47 @@
+# 正式環境映像的建置脈絡（docker/production/Dockerfile）排除清單。
+# 目的有兩個：build context 不要無謂地肥大，以及——更重要的——
+# 確保「本機剛好存在的東西」不會意外被烤進正式映像。
+
+# .env 絕對不能進映像。正式環境的設定是在執行期由 compose 的
+# env_file 注入的，烤進映像等於把資料庫密碼跟 APP_KEY 一起發佈出去，
+# 而且任何拿得到映像的人都讀得到。
+.env
+.env.*
+
+# 這兩個由映像自己重新產生：vendor 走 composer install --no-dev
+# （本機的 vendor 含 sail/phpunit/faker 等 dev 依賴），
+# public/build 走 assets 階段的 npm run build。
+/vendor
+/node_modules
+/public/build
+/public/hot
+/public/storage
+
+# 開發／測試才需要的東西
+/tests
+/.git
+/.github
+phpunit.xml
+.phpunit.result.cache
+/.phpunit.cache
+compose.yaml
+
+# 整個 storage 都排除，由 Dockerfile 自己 mkdir 出乾淨的目錄骨架。
+#
+# 只排除「內容」（例如 /storage/logs/*）而保留目錄的作法試過，會有兩個
+# 問題：本機的 storage/framework/testing（跑測試留下的）之類的東西會被
+# 一起帶進正式映像；更糟的是目錄到底存不存在會取決於「本機剛好有沒有
+# 那個 .gitignore 檔」，等於讓映像內容依賴開發機的狀態。
+/storage
+/storage/pail
+/storage/*.key
+
+# 編輯器／作業系統
+/.idea
+/.vscode
+/.zed
+/.fleet
+/.nova
+.DS_Store
+Thumbs.db
+/auth.json
