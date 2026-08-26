@@ -239,12 +239,33 @@
     }
 
     /*
-     * divide-slate-100 在淺色主題下太淡，跟白色背景幾乎分不出來——這裡
-     * 特意比垂直格線（divide-slate-200）再深一階，讓橫向格線至少跟
-     * 垂直格線一樣看得清楚，不會反而更不明顯。
+     * 橫向格線畫在每一列的下邊框，不是用 divide-y——divide-y 編譯出來是
+     * 「同一個父層底下、相鄰兄弟之間」才加線（tbody > tr ~ tr），一張表
+     * 只有單一 tbody 時看起來沒問題，但「上午缺席詳細清單」為了列印分頁
+     * 是一個班級一個 tbody（見該頁 blade 的說明），結果只有一列的班級
+     * （到齊／未送出）完全沒有線、班級與班級之間也沒有線。改成畫在
+     * tr 的下邊框就與 tbody 怎麼分組無關。
+     *
+     * 顏色比垂直格線（divide-slate-200）深一階：divide-slate-100 在淺色
+     * 主題下跟白底幾乎分不出來，橫線不該比直線還不明顯。
+     *
+     * 顏色一定要用 border-b-slate-300 這種「只設定下邊框顏色」的寫法，
+     * 不能寫成 plain 的 border-slate-300——後者編譯出來是 border-color
+     * 這個 shorthand，會把四個邊的顏色一起設定，蓋過上面 divide-x 想套
+     * 在直向格線上的 slate-200，理由跟下面 .data-table thead th 那段
+     * 註解講的是同一件事。
      */
-    .data-table tbody {
-        @apply divide-y divide-slate-300 dark:divide-slate-800;
+    .data-table tbody tr {
+        @apply border-b border-b-slate-300 dark:border-b-slate-800;
+    }
+
+    /*
+     * 整張表最後一列不畫底線——.table-wrap 本身已經有外框，再加一條會
+     * 變成緊貼的雙線。用 last-of-type 才能同時涵蓋單一 tbody 跟多個
+     * tbody 兩種情況。
+     */
+    .data-table tbody:last-of-type tr:last-child {
+        @apply border-b-0;
     }
 
     .data-table th,
@@ -318,10 +339,39 @@
         background: transparent !important;
     }
 
+    /*
+     * 表格寬度退一點點、不要正好貼齊可列印區域的右緣。表格是
+     * border-collapse: collapse（Tailwind preflight 的預設），最右邊那條
+     * 框線正好落在版面邊界上，欄寬又是 colgroup 的百分比、算出來常常是
+     * 小數，經過印表機/PDF 的裝置像素取整之後那條線可能被削掉一半甚至
+     * 整條不見。留 1px 讓它整條落在版面內。
+     *
+     * （另外提醒：Chrome 列印預覽是縮放後的畫面，某些縮放比例下 1px 的
+     * 線在預覽裡看起來會變淡或消失，但實際輸出是正常的——要判斷有沒有
+     * 真的少一條線，用「另存為 PDF」開檔放大看比較準。）
+     */
+    .print-table {
+        width: calc(100% - 1px) !important;
+    }
+
     .table-wrap {
         overflow: visible !important;
         border: 0 !important;
         box-shadow: none !important;
+    }
+
+    /*
+     * 螢幕上用徽章（有底色的圓角標籤）強調「到齊」跟「未送出」的差別，
+     * 但瀏覽器預設不印背景色，紙上只會剩下一個顏色偏淡的文字。列印時
+     * 一律拆掉徽章造型、回到純黑文字，靠文字本身表達即可。
+     */
+    .print-table .badge,
+    .print-table [class*='badge-'] {
+        background: transparent !important;
+        color: #000 !important;
+        padding: 0 !important;
+        border-radius: 0 !important;
+        font-weight: 700 !important;
     }
 
     @page {

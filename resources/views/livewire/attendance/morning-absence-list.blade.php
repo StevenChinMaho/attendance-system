@@ -74,8 +74,16 @@
                         @if ($row['absentees']->isEmpty())
                             <tr>
                                 <td>{{ $row['code'] }}</td>
-                                <td colspan="2" class="text-slate-500 dark:text-slate-400">
-                                    {{ $row['submitted'] ? '到齊' : '未送出' }}
+                                {{-- 「到齊」跟「未送出」意義完全相反（一個是已回報且全員到，
+                                     一個是根本還沒回報），螢幕上要一眼分得出來，不能只是
+                                     兩個同樣灰色的詞。列印時徽章造型會被拆掉回到純文字，
+                                     見 app.css 的 @media print。 --}}
+                                <td colspan="2">
+                                    @if ($row['submitted'])
+                                        <span class="badge-success">到齊</span>
+                                    @else
+                                        <span class="badge-danger">未送出</span>
+                                    @endif
                                 </td>
                             </tr>
                         @else
