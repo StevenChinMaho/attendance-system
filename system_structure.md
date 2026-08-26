@@ -11,7 +11,8 @@
 - 使用laravel sail進行開發，本機測試，git版本控制。開發過程必須嚴格檢查程式碼安全性，盡可能避免資安漏洞，特別是權限認證必須謹慎檢查，金鑰或.env等私密資料也必須謹慎管理。
 - 所有功能必須盡可能依照框架設計來實現，不能一味地只想實現功能而跳脫框架。
 - 所有路由除登入頁面外一律要求登入（`auth` middleware），未登入者一律只會看到登入介面，不會有任何資料外洩的路由或 API。
-- 本機測試常常需要 `migrate:fresh` 清空資料庫，手動在畫面上重建班級／導師／學生很花時間——`sail artisan migrate:fresh --seed`（或 `migrate --seed`）除了角色權限，也會自動跑 `Database\Seeders\DemoDataSeeder` 建立一組固定帳號可以直接登入測試：`teacher1`／`teacher2`（導師，各帶一班）、`rep1`／`rep2`（學生），密碼統一是 `password`；班級固定建在「目前」學年度／學期，開啟畫面不用先切換學年度就看得到。這個 seeder 只在 local/testing 環境跑（見 `DatabaseSeeder`），不會混進正式環境。
+- 本機測試常常需要 `migrate:fresh` 清空資料庫，手動在畫面上重建班級／導師很花時間——`sail artisan migrate:fresh --seed`（或 `migrate --seed`）除了角色權限，也會自動跑 `Database\Seeders\DemoDataSeeder` 建立一組固定帳號可以直接登入測試：`teacher1`／`teacher2`（導師，各帶一班）、`rep1`／`rep2`（學生身分的帳號），密碼統一是 `password`；班級固定建在「目前」學年度／學期，開啟畫面不用先切換學年度就看得到。這個 seeder 只在 local/testing 環境跑（見 `DatabaseSeeder`），不會混進正式環境。
+- seeder 刻意不建立任何學生，班級是空的：學生已經有正式的批量匯入管道（`/admin/students/import`），空班級才是測那條流程的正確起點，預先塞假學生反而每次都要先清掉。相對的，`rep1`／`rep2` 沒有連結到任何學生資料，登入後名下不會有班級、導覽列不會出現「點名」入口——要以學生身分手動測點名，得先匯入或建立學生，再到「學生管理」把帳號連結上去。
 
 # 開發流程規劃
 
