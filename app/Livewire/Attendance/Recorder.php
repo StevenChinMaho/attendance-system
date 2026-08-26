@@ -7,6 +7,7 @@ use App\Livewire\Concerns\AttendancePeriods;
 use App\Models\AttendanceRecord;
 use App\Models\AttendanceSession;
 use App\Models\SchoolClass;
+use App\Support\AttendanceWindow;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Support\Facades\DB;
@@ -81,8 +82,27 @@ class Recorder extends Component
         $this->loadSession();
     }
 
+    /**
+     * 這個帳號現在可不可以送出點名單——沒有 attendance.record.anytime
+     * 權限的身分（預設是學生）只能在校內作息時間內操作，見
+     * App\Support\AttendanceWindow。畫面跟 submit() 共用這一個方法，
+     * 才不會出現「按鈕看起來能按但送出被擋」或反過來的落差。
+     */
+    public function canSubmitNow(): bool
+    {
+        return auth()->user()->can('attendance.record.anytime') || AttendanceWindow::isOpen();
+    }
+
     public function submit(): void
     {
+        // 伺服器端才是真正的把關：畫面上把按鈕藏起來只是提示，wire:click
+        // 的請求本來就可以被直接送出來，不能只靠 Blade 的條件判斷。
+        if (! $this->canSubmitNow()) {
+            session()->flash('error', '現在不在可以點名的時間內（'.AttendanceWindow::label().'），如需補登請聯絡導師。');
+
+            return;
+        }
+
         $this->validate([
             'date' => ['required', 'date'],
             'period' => ['required', Rule::in(array_keys(AttendancePeriods::PERIODS))],
@@ -273,6 +293,8 @@ class Recorder extends Component
             'statusOptions' => AttendanceStatus::cases(),
             'sessionRecords' => $this->currentSessionRecords(),
             'submittedPeriods' => $this->submittedPeriods(),
+            'canSubmitNow' => $this->canSubmitNow(),
+            'attendanceWindowLabel' => AttendanceWindow::label(),
         ]);
     }
 }

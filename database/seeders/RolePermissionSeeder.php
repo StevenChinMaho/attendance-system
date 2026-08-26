@@ -23,6 +23,7 @@ class RolePermissionSeeder extends Seeder
     {
         $permissions = [
             'attendance.record',        // 送出/查看自己班級的點名（學生、導師、管理者）
+            'attendance.record.anytime', // 不受 07:00～17:00 時段限制（導師、管理者）
             'attendance.follow_up.manage', // 建立/編輯「處理情形」（學生、導師、管理者）
             'attendance.dashboard.view', // 查看全校即時點名看板（導師、管理者，學生不用）
             'users.manage',             // /admin/users：建立帳號、指派角色
@@ -41,15 +42,21 @@ class RolePermissionSeeder extends Seeder
         // App\Support\RoleLabel 決定）：除了點名，也能填寫「處理情形」
         // ——範圍一樣只限自己的班級，由 AttendanceRecordPolicy 的
         // ownSchoolClasses() 檢查把關，不會因此看得到別班的紀錄。
+        //
+        // 刻意沒有 attendance.record.anytime：學生只能在校內作息時間
+        // （見 App\Support\AttendanceWindow）內送出點名單。
         $studentRep = Role::firstOrCreate(['name' => 'student_rep', 'guard_name' => 'web']);
         $studentRep->syncPermissions([
             'attendance.record',
             'attendance.follow_up.manage',
         ]);
 
+        // 導師有 attendance.record.anytime：補登昨天漏點的、下班後才收到
+        // 家長回覆要更正狀態，都是正當的行政作業，不該被時間擋住。
         $homeroomTeacher = Role::firstOrCreate(['name' => 'homeroom_teacher', 'guard_name' => 'web']);
         $homeroomTeacher->syncPermissions([
             'attendance.record',
+            'attendance.record.anytime',
             'attendance.follow_up.manage',
             'attendance.dashboard.view',
         ]);

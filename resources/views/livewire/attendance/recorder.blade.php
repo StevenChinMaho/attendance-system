@@ -7,6 +7,22 @@
         </div>
     @endif
 
+    @if (session('error'))
+        <div class="alert-error mt-4">
+            {{ session('error') }}
+        </div>
+    @endif
+
+    {{-- 沒有 attendance.record.anytime 權限的身分（預設是學生）只能在
+         校內作息時間內送出點名單——提示放在頁面最上方而不是只把按鈕
+         變灰，不然使用者會以為是系統壞了。見 App\Support\AttendanceWindow。 --}}
+    @unless ($canSubmitNow)
+        <div class="alert-info mt-4">
+            現在不在可以點名的時間內。點名開放時間是每天 {{ $attendanceWindowLabel }}，
+            目前時間 {{ now()->format('H:i') }}。這段時間外仍然可以查看點名狀況，但不能送出；如需補登請聯絡導師。
+        </div>
+    @endunless
+
     <div class="surface mt-6 flex flex-wrap items-end gap-4 p-4">
         <div>
             <label class="block text-xs font-medium text-slate-500 dark:text-slate-400">日期</label>
@@ -109,7 +125,14 @@
     @if ($students->isEmpty())
         <p class="mt-4 text-sm text-slate-500 dark:text-slate-400">這個班級目前還沒有學生資料。</p>
     @else
-        <button type="button" wire:click="submit" class="btn-primary mt-4 px-4 py-2">
+        {{-- disabled 只是提示，真正的把關在 Recorder::submit() 裡（wire:click
+             的請求可以被直接送出來，不能只靠畫面條件）。 --}}
+        <button
+            type="button"
+            wire:click="submit"
+            @disabled(! $canSubmitNow)
+            class="btn-primary mt-4 px-4 py-2 disabled:cursor-not-allowed disabled:opacity-50"
+        >
             送出點名單
         </button>
     @endif

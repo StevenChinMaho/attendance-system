@@ -12,8 +12,10 @@ use App\Models\StudentDeparture;
 use App\Models\Teacher;
 use App\Models\User;
 use App\Support\AcademicPeriod;
+use App\Support\AttendanceWindow;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
 use Spatie\Permission\Models\Role;
@@ -603,5 +605,124 @@ class RecorderTest extends TestCase
             ->call('submit')
             ->assertSeeHtml('addFollowUp')
             ->assertSee('查證後其實有到');
+    }
+
+    public function test_a_student_can_submit_inside_the_attendance_window(): void
+    {
+        Carbon::setTestNow('2026-08-26 09:00:00');
+
+        $class = SchoolClass::factory()->create();
+        $student = Student::factory()->forClass($class)->create();
+        $rep = $this->studentRepFor($class);
+
+        Livewire::actingAs($rep)
+            ->test(Recorder::class, ['schoolClass' => $class])
+            ->set("statuses.{$student->id}", AttendanceStatus::Absent->value)
+            ->call('submit');
+
+        $this->assertDatabaseHas('attendance_records', [
+            'student_id' => $student->id,
+            'status' => AttendanceStatus::Absent->value,
+        ]);
+    }
+
+    public function test_a_student_cannot_submit_outside_the_attendance_window(): void
+    {
+        // 畫面上按鈕會是 disabled，但 wire:click 的請求可以被直接送出來
+        // ——真正的把關在 Recorder::submit() 裡，這裡直接 call('submit')
+        // 就是在驗那一層，不是驗畫面。
+        Carbon::setTestNow('2026-08-26 22:00:00');
+
+        $class = SchoolClass::factory()->create();
+        $student = Student::factory()->forClass($class)->create();
+        $rep = $this->studentRepFor($class);
+
+        Livewire::actingAs($rep)
+            ->test(Recorder::class, ['schoolClass' => $class])
+            ->set("statuses.{$student->id}", AttendanceStatus::Absent->value)
+            ->call('submit');
+
+        $this->assertDatabaseCount('attendance_records', 0);
+        $this->assertDatabaseCount('attendance_sessions', 0);
+    }
+
+    public function test_a_homeroom_teacher_can_submit_outside_the_attendance_window(): void
+    {
+        // 導師有 attendance.record.anytime——補登昨天漏點的、下班後才收到
+        // 家長回覆要更正狀態，都不該被時間擋住。
+        Carbon::setTestNow('2026-08-26 22:00:00');
+
+        $class = SchoolClass::factory()->create();
+        $student = Student::factory()->forClass($class)->create();
+        $teacherUser = $this->homeroomTeacherFor($class);
+
+        Livewire::actingAs($teacherUser)
+            ->test(Recorder::class, ['schoolClass' => $class])
+            ->set("statuses.{$student->id}", AttendanceStatus::Absent->value)
+            ->call('submit');
+
+        $this->assertDatabaseHas('attendance_records', [
+            'student_id' => $student->id,
+            'status' => AttendanceStatus::Absent->value,
+        ]);
+    }
+
+    public function test_an_admin_can_submit_outside_the_attendance_window(): void
+    {
+        Carbon::setTestNow('2026-08-26 22:00:00');
+
+        $class = SchoolClass::factory()->create();
+        $student = Student::factory()->forClass($class)->create();
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        Livewire::actingAs($admin)
+            ->test(Recorder::class, ['schoolClass' => $class])
+            ->set("statuses.{$student->id}", AttendanceStatus::Absent->value)
+            ->call('submit');
+
+        $this->assertDatabaseHas('attendance_records', ['student_id' => $student->id]);
+    }
+
+    public function test_a_student_still_sees_the_page_outside_the_window_with_an_explanation(): void
+    {
+        // 時段外只是不能送出，不是整頁擋掉——還是要看得到目前的點名狀況，
+        // 而且要有明確的提示說明為什麼不能送，不然會以為系統壞了。
+        Carbon::setTestNow('2026-08-26 22:00:00');
+
+        $class = SchoolClass::factory()->create();
+        Student::factory()->forClass($class)->create(['name' => '陳小明']);
+        $rep = $this->studentRepFor($class);
+
+        Livewire::actingAs($rep)
+            ->test(Recorder::class, ['schoolClass' => $class])
+            ->assertOk()
+            ->assertSee('陳小明')
+            ->assertSee('現在不在可以點名的時間內')
+            ->assertSee(AttendanceWindow::label());
+    }
+
+    public function test_no_time_restriction_notice_is_shown_to_a_student_inside_the_window(): void
+    {
+        Carbon::setTestNow('2026-08-26 09:00:00');
+
+        $class = SchoolClass::factory()->create();
+        $rep = $this->studentRepFor($class);
+
+        Livewire::actingAs($rep)
+            ->test(Recorder::class, ['schoolClass' => $class])
+            ->assertDontSee('現在不在可以點名的時間內');
+    }
+
+    public function test_no_time_restriction_notice_is_shown_to_a_teacher_outside_the_window(): void
+    {
+        Carbon::setTestNow('2026-08-26 22:00:00');
+
+        $class = SchoolClass::factory()->create();
+        $teacherUser = $this->homeroomTeacherFor($class);
+
+        Livewire::actingAs($teacherUser)
+            ->test(Recorder::class, ['schoolClass' => $class])
+            ->assertDontSee('現在不在可以點名的時間內');
     }
 }
