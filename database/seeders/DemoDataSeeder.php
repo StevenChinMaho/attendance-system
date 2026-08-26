@@ -23,7 +23,7 @@ use Illuminate\Database\Seeder;
  * 帳號密碼統一是 UserFactory 預設的 "password"（跟 DatabaseSeeder 建立
  * 的 admin 帳號一致），使用者名稱固定、方便每次重建後直接登入：
  * - teacher1／teacher2：導師（各帶一班）
- * - rep1／rep2：副班長（各自班級裡的其中一位學生）
+ * - rep1／rep2：學生帳號（各自班級裡的其中一位學生，有登入帳號）
  */
 class DemoDataSeeder extends Seeder
 {
@@ -81,7 +81,7 @@ class DemoDataSeeder extends Seeder
             'homeroom_teacher_id' => $teacher->id,
         ]);
 
-        // 前面幾個是一般學生，最後一個是副班長、連結登入帳號。
+        // 前面幾個學生沒有帳號，最後一個連結登入帳號（負責填點名單那位）。
         Student::factory()->forClass($class)->count(7)->create();
 
         $repUser = User::factory()->create(['username' => $repUsername]);

@@ -178,7 +178,7 @@ class RecorderTest extends TestCase
         $class = SchoolClass::factory()->create(['academic_year' => 112, 'semester' => 1]);
         $rep = $this->studentRepFor($class);
 
-        // 目前選取的預設是「目前」學年度／學期，跟這位副班長實際的班級
+        // 目前選取的預設是「目前」學年度／學期，跟這位學生實際的班級
         // 所在學年度不同——不代表帳號沒有連結任何班級，只是不在目前
         // 選取的範圍裡，提示應該引導使用者切換學年度而不是聯絡管理者。
         $this->actingAs($rep)
@@ -444,7 +444,7 @@ class RecorderTest extends TestCase
             ->test(Recorder::class, ['schoolClass' => $class])
             ->set("statuses.{$student->id}", AttendanceStatus::Absent->value);
 
-        // 副班長被拔掉權限（例如轉班、畢業、或帳號被停權後移除角色）。
+        // 學生被拔掉權限（例如轉班、畢業、或帳號被停權後移除角色）。
         $rep->removeRole('student_rep');
 
         $component->call('submit')->assertForbidden();
@@ -547,9 +547,36 @@ class RecorderTest extends TestCase
             ->call('submit')
             ->assertSeeHtml('addFollowUp');
 
-        // 副班長點名得了但沒有處理情形的權限，畫面上不該出現這個區塊。
+        // 學生身分現在也有 attendance.follow_up.manage 權限，自己班級的
+        // 處理情形填得了，畫面上要看得到這個區塊。
         $rep = $this->studentRepFor($class);
         Livewire::actingAs($rep)
+            ->test(Recorder::class, ['schoolClass' => $class])
+            ->assertSeeHtml('addFollowUp');
+    }
+
+    public function test_a_role_without_the_follow_up_permission_does_not_see_the_section(): void
+    {
+        // 三種內建身分目前剛好都有 attendance.follow_up.manage，但
+        // /admin/roles 建的自訂身分可以只勾點名不勾處理情形——那種身分
+        // 就不該看到這個區塊，權限檢查不能因為內建身分都通過就省略。
+        $class = SchoolClass::factory()->create();
+        $absent = Student::factory()->forClass($class)->create(['name' => '缺席同學']);
+
+        $teacherUser = $this->homeroomTeacherFor($class);
+        Livewire::actingAs($teacherUser)
+            ->test(Recorder::class, ['schoolClass' => $class])
+            ->set("statuses.{$absent->id}", AttendanceStatus::Absent->value)
+            ->call('submit');
+
+        $recordOnly = Role::create(['name' => '只能點名', 'guard_name' => 'web']);
+        $recordOnly->syncPermissions(['attendance.record']);
+
+        $limited = User::factory()->create();
+        $limited->assignRole($recordOnly);
+        Student::factory()->forClass($class)->create(['user_id' => $limited->id]);
+
+        Livewire::actingAs($limited)
             ->test(Recorder::class, ['schoolClass' => $class])
             ->assertDontSeeHtml('addFollowUp');
     }

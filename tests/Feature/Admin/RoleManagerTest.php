@@ -53,12 +53,16 @@ class RoleManagerTest extends TestCase
         // 內建三個角色的英文代號一律透過 App\Support\RoleLabel 轉成中文
         // 顯示（見 CLAUDE.md「角色/身分」的用語說明），畫面上看不到原始
         // 的英文代號。
+        // student_rep 的中文名稱「學生」刻意不用 assertSee 驗：權限勾選欄
+        // 本來就有「學生管理」這個標籤，看到「學生」兩個字並不能證明
+        // RoleLabel 有正常運作，會是個永遠會過的假斷言。這裡真正的把關是
+        // 下面的 assertDontSee('student_rep')（畫面上不該出現英文代號），
+        // 對照表本身的正確性由 RoleLabelTest 直接驗。
         $this->actingAs($this->admin())
             ->get('/admin/roles')
             ->assertOk()
             ->assertSee('管理者')
             ->assertSee('導師')
-            ->assertSee('副班長')
             ->assertDontSee('homeroom_teacher')
             ->assertDontSee('student_rep');
     }

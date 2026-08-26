@@ -38,14 +38,14 @@ Route::middleware(['auth', EnsureAccountIsActive::class, EnsureUserHasChangedPas
     // middleware 的說明。
     Route::view('/account/password', 'account.password')->name('account.password');
 
-    // 導師/管理者看即時點名看板，副班長看簡單歡迎頁——見
+    // 導師/管理者看即時點名看板，學生看簡單歡迎頁——見
     // ShowDashboardController，決定畫在哪個 view 的邏輯放在 controller。
     Route::get('/dashboard', ShowDashboardController::class)->name('dashboard');
 
     Route::get('/attendance', GoToMyClassAttendanceController::class)->name('attendance.mine');
 
     // can:recordAttendance,schoolClass 走 SchoolClassPolicy：admin 一定
-    // 可以，副班長/導師僅限自己的班級——見 app/Policies/SchoolClassPolicy.php。
+    // 可以，學生/導師僅限自己的班級——見 app/Policies/SchoolClassPolicy.php。
     Route::get('/attendance/{schoolClass}', ShowAttendanceController::class)
         ->middleware('can:recordAttendance,schoolClass')
         ->name('attendance.show');

@@ -28,7 +28,7 @@ class AttendanceSession extends Model
     }
 
     /**
-     * 誰送出這次點名（通常是副班長，也可能是導師代為補登）。
+     * 誰送出這次點名（通常是學生，也可能是導師代為補登）。
      */
     public function recordedBy(): BelongsTo
     {

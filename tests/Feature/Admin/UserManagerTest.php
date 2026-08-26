@@ -58,7 +58,7 @@ class UserManagerTest extends TestCase
 
         Livewire::actingAs($admin)
             ->test(UserManager::class)
-            ->set('name', '新副班長')
+            ->set('name', '新學生')
             ->set('username', 'newrep')
             ->set('password', 'a-strong-password')
             ->set('role', 'student_rep')
@@ -189,7 +189,7 @@ class UserManagerTest extends TestCase
 
         Livewire::actingAs($admin)
             ->test(UserManager::class)
-            ->set('name', '新副班長')
+            ->set('name', '新學生')
             ->set('username', 'newrep')
             ->set('password', 'a-strong-password')
             ->set('role', 'student_rep')

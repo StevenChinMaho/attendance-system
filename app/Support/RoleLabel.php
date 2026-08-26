@@ -16,7 +16,7 @@ final class RoleLabel
     private const LABELS = [
         'admin' => '管理者',
         'homeroom_teacher' => '導師',
-        'student_rep' => '副班長',
+        'student_rep' => '學生',
     ];
 
     public static function forName(string $name): string

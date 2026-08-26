@@ -75,7 +75,7 @@ class AttendanceQuickLinkTest extends TestCase
 
     public function test_admin_sees_nothing_when_no_class_exists_in_the_selected_period(): void
     {
-        // 管理者沒有「本來就該有一個預設班級」的期待，跟副班長/導師不
+        // 管理者沒有「本來就該有一個預設班級」的期待，跟學生/導師不
         // 一樣（見 attendance-quick-link.blade.php）——沒有班級可選就
         // 不顯示任何東西，不需要給錯誤提示連結。
         SchoolClass::factory()->create(['academic_year' => 112, 'semester' => 1]);

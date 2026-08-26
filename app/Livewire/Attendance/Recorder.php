@@ -91,7 +91,7 @@ class Recorder extends Component
 
         // 整段包進 transaction：upsert 跟稽核紀錄要嘛一起成功要嘛一起
         // 失敗，不能發生「狀態改了但稽核紀錄寫失敗」這種半套結果，也
-        // 避免兩個人（例如副班長跟導師）幾乎同時送出同一個 session 時，
+        // 避免兩個人（例如學生跟導師）幾乎同時送出同一個 session 時，
         // 各自根據送出前一刻的舊狀態算出不一致的「變動前」稽核值。
         // lockForUpdate() 讓後到的請求排隊等前一個 transaction 真正
         // commit 完，讀到的才是「送出當下」真正的最新狀態。

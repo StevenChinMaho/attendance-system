@@ -22,9 +22,9 @@ class RolePermissionSeeder extends Seeder
     public function run(): void
     {
         $permissions = [
-            'attendance.record',        // 送出/查看自己班級的點名（副班長、導師、管理者）
-            'attendance.follow_up.manage', // 建立/編輯「處理情形」（導師、管理者）
-            'attendance.dashboard.view', // 查看全校即時點名看板（導師、管理者，副班長不用）
+            'attendance.record',        // 送出/查看自己班級的點名（學生、導師、管理者）
+            'attendance.follow_up.manage', // 建立/編輯「處理情形」（學生、導師、管理者）
+            'attendance.dashboard.view', // 查看全校即時點名看板（導師、管理者，學生不用）
             'users.manage',             // /admin/users：建立帳號、指派角色
             'teachers.manage',          // /admin/teachers：新增/編輯教師資料
             'classes.manage',           // /admin/classes：新增/修改班級
@@ -36,8 +36,16 @@ class RolePermissionSeeder extends Seeder
             Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
         }
 
+        // 學生（角色代號仍是 student_rep，程式碼多處依賴這個固定字串，
+        // 見 RoleManager::PROTECTED_ROLE_NAMES；介面上顯示的中文名稱由
+        // App\Support\RoleLabel 決定）：除了點名，也能填寫「處理情形」
+        // ——範圍一樣只限自己的班級，由 AttendanceRecordPolicy 的
+        // ownSchoolClasses() 檢查把關，不會因此看得到別班的紀錄。
         $studentRep = Role::firstOrCreate(['name' => 'student_rep', 'guard_name' => 'web']);
-        $studentRep->syncPermissions(['attendance.record']);
+        $studentRep->syncPermissions([
+            'attendance.record',
+            'attendance.follow_up.manage',
+        ]);
 
         $homeroomTeacher = Role::firstOrCreate(['name' => 'homeroom_teacher', 'guard_name' => 'web']);
         $homeroomTeacher->syncPermissions([

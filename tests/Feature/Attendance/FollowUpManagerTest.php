@@ -104,16 +104,41 @@ class FollowUpManagerTest extends TestCase
         $this->assertDatabaseHas('attendance_follow_ups', ['content' => '9:19已到']);
     }
 
-    public function test_student_rep_cannot_add_a_follow_up_even_for_their_own_class(): void
+    public function test_a_student_can_add_a_follow_up_for_their_own_class(): void
     {
-        // 副班長有 attendance.record 權限，但沒有 attendance.follow_up.manage
-        // ——能點名，不代表能寫「處理情形」，這是兩種不同的授權。
+        // 學生身分（角色代號 student_rep）現在也有 attendance.follow_up.manage
+        // 權限，自己班級的處理情形填得了。
         $class = SchoolClass::factory()->create();
         $record = $this->absentRecordFor($class);
 
         $repUser = User::factory()->create();
         $repUser->assignRole('student_rep');
         Student::factory()->forClass($class)->create(['user_id' => $repUser->id]);
+
+        Livewire::actingAs($repUser)
+            ->test(FollowUpManager::class, ['record' => $record])
+            ->set('content', '已電聯家長')
+            ->call('addFollowUp')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('attendance_follow_ups', [
+            'attendance_record_id' => $record->id,
+            'content' => '已電聯家長',
+            'created_by' => $repUser->id,
+        ]);
+    }
+
+    public function test_a_student_cannot_add_a_follow_up_for_another_class(): void
+    {
+        // 有權限不等於沒有範圍限制——學生能填處理情形之後，「只限自己
+        // 班級」這一層就成了唯一擋住他碰到別班紀錄的防線。
+        $class = SchoolClass::factory()->create();
+        $otherClass = SchoolClass::factory()->create(['grade' => 2]);
+        $record = $this->absentRecordFor($class);
+
+        $repUser = User::factory()->create();
+        $repUser->assignRole('student_rep');
+        Student::factory()->forClass($otherClass)->create(['user_id' => $repUser->id]);
 
         Livewire::actingAs($repUser)
             ->test(FollowUpManager::class, ['record' => $record])

@@ -6,10 +6,11 @@ use App\Models\AttendanceRecord;
 use App\Models\User;
 
 /**
- * 「處理情形」只有導師跟管理者能建立/查看——副班長雖然能點名，但沒有
- * attendance.follow_up.manage 權限（見 RolePermissionSeeder），跟
+ * 「處理情形」學生、導師、管理者都能建立/查看（三種內建身分都有
+ * attendance.follow_up.manage 權限，見 RolePermissionSeeder），跟
  * SchoolClassPolicy 一樣是權限（能不能做這種事）+ 範圍（哪個班）
- * 兩層一起檢查。
+ * 兩層一起檢查——有權限不代表看得到別班的紀錄，範圍那一層仍然只放行
+ * 自己名下的班級。
  */
 class AttendanceRecordPolicy
 {

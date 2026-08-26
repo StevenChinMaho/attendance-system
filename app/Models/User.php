@@ -41,7 +41,7 @@ class User extends Authenticatable
     }
 
     /**
-     * The linked student profile, if this account belongs to a class representative (副班長).
+     * The linked student profile, if this account belongs to a student (學生).
      */
     public function student(): HasOne
     {
@@ -72,7 +72,7 @@ class User extends Authenticatable
     }
 
     /**
-     * 這個帳號名下所有的班級：副班長跟導師現在是同一種形狀——一個帳號
+     * 這個帳號名下所有的班級：學生跟導師現在是同一種形狀——一個帳號
      * 只能連結一個學生身份（見 UserAccountIsUnlinked），但那個學生本身
      * 在校期間會歷經好幾個班級（`Student::schoolClasses()` 是多對多，
      * 見 SchoolClass::students() 的說明），導師則可能同時或跨學年帶過

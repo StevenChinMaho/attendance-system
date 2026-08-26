@@ -37,7 +37,7 @@ class AttendanceRecord extends Model
     }
 
     /**
-     * 最後修改這筆紀錄狀態的人（可能是副班長送出時、也可能是導師事後修正）。
+     * 最後修改這筆紀錄狀態的人（可能是學生送出時、也可能是導師事後修正）。
      */
     public function updatedBy(): BelongsTo
     {

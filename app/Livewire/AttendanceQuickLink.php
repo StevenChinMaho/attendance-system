@@ -7,9 +7,9 @@ use App\Models\SchoolClass;
 use Livewire\Component;
 
 /**
- * nav bar 上的「點名」快捷入口，副班長、導師、管理者共用同一個介面，
+ * nav bar 上的「點名」快捷入口，學生、導師、管理者共用同一個介面，
  * 不再是管理者得另外從「班級管理」列表點進去才能點名——差別只在於
- * 「可以選哪些班級」：副班長/導師只看得到自己名下的班級（見
+ * 「可以選哪些班級」：學生/導師只看得到自己名下的班級（見
  * User::ownSchoolClasses()），can('classes.manage') 的帳號（內建的
  * admin，或是被賦予這個權限的自訂身分，見 App\Livewire\Admin\RoleManager）
  * 沒有固定班級，看的是「目前選取學年度／學期」裡的全部班級——這裡跟

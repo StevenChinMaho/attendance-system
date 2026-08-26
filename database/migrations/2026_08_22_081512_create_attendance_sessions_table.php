@@ -16,7 +16,7 @@ return new class extends Migration
             // 三個值（甲方一天三次點名的需求），但保留擴充為逐節點名
             // （1~8節）的彈性，不需要改資料表結構——見 system_structure.md。
             $table->string('period');
-            // 誰送出這次點名（通常是副班長，也可能是導師代為補登），供權責
+            // 誰送出這次點名（通常是學生，也可能是導師代為補登），供權責
             // 追溯用；跟「這個時段點名是否已完成」是兩件事，後者由這筆
             // session 存不存在直接判斷，不需要額外欄位。
             $table->foreignId('recorded_by')->constrained('users');

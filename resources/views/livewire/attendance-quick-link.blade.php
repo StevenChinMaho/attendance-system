@@ -40,7 +40,7 @@
             點名
         </a>
     @elseif (! auth()->user()->can('classes.manage'))
-        {{-- 副班長/導師即使目前選取的學年度／學期沒有帶班，也維持顯示
+        {{-- 學生/導師即使目前選取的學年度／學期沒有帶班，也維持顯示
              這個連結，走 GoToMyClassAttendanceController 給出「可以切換
              學年度」的提示，而不是整個項目直接消失讓人以為系統壞了。
              can('classes.manage') 的帳號（admin 或被賦予這個權限的自訂

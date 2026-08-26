@@ -98,7 +98,7 @@ class StudentManagerTest extends TestCase
         // 連結帳號時姓名不需要（也不應該）手動打，直接沿用帳號本身的
         // users.name——見 Student::resolveName() 的說明，跟教師管理
         // 同一套處理方式。
-        $account = User::factory()->create(['name' => '副班長']);
+        $account = User::factory()->create(['name' => '林小美']);
         $account->assignRole('student_rep');
 
         Livewire::actingAs($this->admin())
@@ -109,7 +109,7 @@ class StudentManagerTest extends TestCase
             ->call('createStudent')
             ->assertHasNoErrors();
 
-        $this->assertDatabaseHas('students', ['name' => '副班長', 'user_id' => $account->id]);
+        $this->assertDatabaseHas('students', ['name' => '林小美', 'user_id' => $account->id]);
     }
 
     public function test_a_manually_typed_name_is_ignored_when_an_account_is_linked_to_a_student(): void

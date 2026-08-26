@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('students', function (Blueprint $table) {
             $table->id();
             $table->foreignId('school_class_id')->constrained('school_classes')->cascadeOnDelete();
-            // nullable + unique：只有副班長會有登入帳號。
+            // nullable + unique：只有需要自己登入系統的學生會有登入帳號。
             $table->foreignId('user_id')->nullable()->unique()->constrained()->nullOnDelete();
             $table->string('student_number');
             $table->string('seat_number');

@@ -89,7 +89,8 @@ class Student extends Model
     }
 
     /**
-     * 登入帳號，非必填——全校僅副班長才會有帳號連到自己的學生資料。
+     * 登入帳號，非必填——只有需要自己登入系統的學生（例如負責填點名單
+     * 的那一位）才會有帳號連到自己的學生資料，大部分學生沒有。
      */
     public function user(): BelongsTo
     {
@@ -98,7 +99,7 @@ class Student extends Model
 
     /**
      * resolveName()/displayName() 的行為說明見
-     * App\Models\Concerns\HasLinkableAccountName——副班長連結帳號後，
+     * App\Models\Concerns\HasLinkableAccountName——學生連結帳號後，
      * 姓名一律沿用該帳號的 users.name，不用在學生管理再手動打一次，跟
      * Teacher 的處理方式一致。
      */

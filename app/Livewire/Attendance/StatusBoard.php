@@ -12,7 +12,7 @@ use Livewire\Component;
 
 /**
  * 全校即時點名看板，給導師與管理者看（見 RolePermissionSeeder 的
- * attendance.dashboard.view）——不是給副班長看的，副班長只需要透過
+ * attendance.dashboard.view）——不是給學生看的，學生只需要透過
  * Recorder 管好自己班。畫面用 wire:poll 輪詢更新，對應
  * system_structure.md「看板採輪詢方式更新即可，不需要 WebSocket」。
  *

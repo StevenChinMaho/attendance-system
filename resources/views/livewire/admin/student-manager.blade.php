@@ -70,7 +70,7 @@
             </div>
 
             <div class="col-span-2">
-                <label class="field-label">連結登入帳號（選填，副班長才需要）</label>
+                <label class="field-label">連結登入帳號（選填，需要自己登入系統的學生才需要）</label>
                 <select wire:model.live="userId" class="field-input">
                     <option value="">不連結帳號</option>
                     @foreach ($availableUsers as $user)

@@ -11,7 +11,7 @@ class RoleLabelTest extends TestCase
     {
         $this->assertSame('管理者', RoleLabel::forName('admin'));
         $this->assertSame('導師', RoleLabel::forName('homeroom_teacher'));
-        $this->assertSame('副班長', RoleLabel::forName('student_rep'));
+        $this->assertSame('學生', RoleLabel::forName('student_rep'));
     }
 
     public function test_an_unrecognised_custom_role_name_falls_back_to_itself(): void

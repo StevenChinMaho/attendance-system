@@ -15,8 +15,9 @@ class FollowUpManager extends Component
      * 跟 Recorder::boot() 同樣的理由：每次 mount/hydrate 都重新檢查，
      * 不是只依賴父層頁面的路由 middleware——這個元件被嵌在 Recorder
      * 頁面裡，父層的 can:recordAttendance 只保證「能點名這個班」，不
-     * 保證「能管理處理情形」（副班長就點名得了但沒有這個權限），需要
-     * 自己再做一次獨立的授權檢查。
+     * 保證「能管理處理情形」：三種內建身分目前剛好兩種權限都有，但
+     * /admin/roles 建的自訂身分可以只勾其中一個，所以這裡仍然需要自己
+     * 再做一次獨立的授權檢查，不能靠父層的檢查順便涵蓋。
      */
     public function boot(): void
     {
