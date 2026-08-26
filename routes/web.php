@@ -44,6 +44,12 @@ Route::middleware(['auth', EnsureAccountIsActive::class, EnsureUserHasChangedPas
 
     Route::get('/attendance', GoToMyClassAttendanceController::class)->name('attendance.mine');
 
+    // 給學務處列印的上午缺席名單，權限比照即時看板（全校範圍的檢視，
+    // 學生只看得到自己班，不該進得來）。
+    Route::view('/attendance/morning-absences', 'attendance.morning-absences')
+        ->middleware('can:attendance.dashboard.view')
+        ->name('attendance.morning-absences');
+
     // can:recordAttendance,schoolClass 走 SchoolClassPolicy：admin 一定
     // 可以，學生/導師僅限自己的班級——見 app/Policies/SchoolClassPolicy.php。
     Route::get('/attendance/{schoolClass}', ShowAttendanceController::class)

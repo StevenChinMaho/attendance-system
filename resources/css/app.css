@@ -262,3 +262,69 @@
         @apply flex flex-wrap justify-end gap-2;
     }
 }
+
+/*
+ * 列印樣式——目前只有「上午缺席詳細清單」在用（見
+ * resources/views/livewire/attendance/morning-absence-list.blade.php）。
+ * 走瀏覽器原生列印（按鈕呼叫 window.print()）而不是伺服器產 PDF：這個
+ * 系統介面全是中文，dompdf 之類的 PDF 套件內建字型不含 CJK，中文會印成
+ * 空白或豆腐塊，得自己把一份 CJK 字型檔塞進 repo 並設定字型對應；瀏覽器
+ * 這邊已經用正確的字型把畫面渲染好了，沒有理由再做一次排版引擎。列印
+ * 對話框本身也能「另存為 PDF」，需要電子檔的情境一併涵蓋。
+ */
+@media print {
+    /*
+     * 這個專案是 class-based 深色模式（見檔案開頭的 @custom-variant）。
+     * 使用者開著深色主題按列印時，瀏覽器預設不印背景色，會變成「深色
+     * 主題的淺色文字 + 白紙」，印出來極淡甚至看不到。這裡強制回到白底
+     * 黑字，不依賴瀏覽器的預設行為。
+     */
+    html.dark,
+    html.dark body {
+        background: #fff !important;
+        color: #000 !important;
+    }
+
+    html.dark .print-table th,
+    html.dark .print-table td,
+    html.dark .print-table span {
+        color: #000 !important;
+        background: transparent !important;
+    }
+
+    /* 表頭在每一頁重複出現，翻到第二頁才不用回頭對照欄位。 */
+    .print-table thead {
+        display: table-header-group;
+    }
+
+    /*
+     * 一個班級是一個 tbody（含 rowspan 的班級欄）——整組不能被切到兩頁，
+     * 否則第二頁會出現沒有班級欄的孤兒列，因為 rowspan 的儲存格留在
+     * 上一頁了。
+     */
+    .print-table tbody {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    /* 紙本要看得見格線，螢幕上的 hover 效果則沒有意義。 */
+    .print-table th,
+    .print-table td {
+        border: 1px solid #000 !important;
+        padding: 4px 8px !important;
+    }
+
+    .print-table tbody tr:hover {
+        background: transparent !important;
+    }
+
+    .table-wrap {
+        overflow: visible !important;
+        border: 0 !important;
+        box-shadow: none !important;
+    }
+
+    @page {
+        margin: 12mm;
+    }
+}

@@ -54,4 +54,24 @@ class ClassCodeTest extends TestCase
     {
         $this->assertNull(ClassCode::parse('100'));
     }
+
+    public function test_format_pads_a_single_digit_class_number(): void
+    {
+        $this->assertSame('101', ClassCode::format(1, 1));
+        $this->assertSame('204', ClassCode::format(2, 4));
+    }
+
+    public function test_format_leaves_a_two_digit_class_number_alone(): void
+    {
+        $this->assertSame('211', ClassCode::format(2, 11));
+    }
+
+    public function test_format_is_the_inverse_of_parse(): void
+    {
+        foreach (['101', '111', '203', '307'] as $code) {
+            $parsed = ClassCode::parse($code);
+
+            $this->assertSame($code, ClassCode::format($parsed['grade'], $parsed['class_number']));
+        }
+    }
 }

@@ -4,7 +4,10 @@
         : 'text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white';
 @endphp
 
-<nav class="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+{{-- print:hidden：導覽列在紙本上沒有意義（連結按不了、還占掉版面）
+     ——目前會被列印的是「上午缺席詳細清單」，但這條規則對任何頁面
+     被列印時都成立，所以放在共用的導覽列本身而不是那一頁。 --}}
+<nav class="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 print:hidden">
     <div class="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3 px-4 py-3">
         <div class="flex flex-wrap items-center gap-6">
             <a href="{{ route('dashboard') }}" class="text-sm font-semibold text-slate-900 dark:text-white">
@@ -22,6 +25,14 @@
                  進去但完全沒有連結能點進去」的情形。 --}}
             @can('attendance.record')
                 <livewire:attendance-quick-link />
+            @endcan
+
+            {{-- 給學務處列印的上午缺席名單，跟即時看板同一個權限（全校
+                 範圍的檢視），所以擺在點名入口後面、後台連結前面。 --}}
+            @can('attendance.dashboard.view')
+                <a href="{{ route('attendance.morning-absences') }}" class="{{ $linkClass(request()->routeIs('attendance.morning-absences')) }}">
+                    上午缺席清單
+                </a>
             @endcan
 
             @can('users.manage')

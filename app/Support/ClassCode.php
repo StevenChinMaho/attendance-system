@@ -47,4 +47,15 @@ final class ClassCode
             'class_number' => $classNumber,
         ];
     }
+
+    /**
+     * parse() 的反向操作：把系統裡的 grade + class_number 組回學校慣用的
+     * 三碼代號（1年1班 → "101"、2年11班 → "211"）。跟 parse() 放在同一個
+     * 類別，兩個方向的規則（第一碼年級、後兩碼補零班級編號）才不會各自
+     * 散在別的地方、改了一邊忘了另一邊。
+     */
+    public static function format(int $grade, int $classNumber): string
+    {
+        return $grade.str_pad((string) $classNumber, 2, '0', STR_PAD_LEFT);
+    }
 }
