@@ -1,4 +1,4 @@
-<div wire:poll.15s class="mx-auto max-w-5xl px-4 py-10">
+<div wire:poll.15s class="status-board mx-auto max-w-5xl px-4 py-10">
     <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
             <h1 class="page-title">即時點名看板</h1>
@@ -13,18 +13,65 @@
             </p>
         </div>
 
-        <div>
-            <label class="block text-xs font-medium text-slate-500 dark:text-slate-400">日期</label>
-            <div class="mt-1 flex items-center gap-1.5">
-                <input type="date" wire:model.live="date" class="field-input mt-0 py-1.5">
-                {{-- 這個看板本來就是查「某一天」的點名狀況，切到別天很正常，
-                     但一樣容易忘記自己不是在看今天——跟學年度／學期的
-                     「非本學期」提示同一個理由。 --}}
-                @unless ($date === now()->toDateString())
-                    <span class="badge-warning whitespace-nowrap" title="今天是 {{ now()->format('Y-m-d') }}">
-                        ⚠ 非本日
-                    </span>
-                @endunless
+        <div class="flex items-end gap-4">
+            <div>
+                <label class="block text-xs font-medium text-slate-500 dark:text-slate-400">日期</label>
+                <div class="mt-1 flex items-center gap-1.5">
+                    <input type="date" wire:model.live="date" class="field-input mt-0 py-1.5">
+                    {{-- 這個看板本來就是查「某一天」的點名狀況，切到別天很正常，
+                         但一樣容易忘記自己不是在看今天——跟學年度／學期的
+                         「非本學期」提示同一個理由。 --}}
+                    @unless ($date === now()->toDateString())
+                        <span class="badge-warning whitespace-nowrap" title="今天是 {{ now()->format('Y-m-d') }}">
+                            ⚠ 非本日
+                        </span>
+                    @endunless
+                </div>
+            </div>
+
+            {{--
+                這個看板會被放在辦公室的螢幕上整天常駐顯示，全螢幕是為了
+                把瀏覽器外框讓出來給內容——但光是全螢幕不會讓字變大，真正
+                解決「字太小」的是 app.css 裡 :fullscreen 那組規則（解除
+                寬度上限、字級整體放大）。兩者要一起才有效果。
+
+                對 document.documentElement 全螢幕，不是對看板那個 div：
+                這頁有 wire:poll.15s，每 15 秒 Livewire 會回來重繪 DOM，
+                如果全螢幕的目標節點在 morph 過程被換掉，瀏覽器會直接跳出
+                全螢幕，變成每 15 秒閃一次。<html> 永遠不會被 Livewire 動到。
+
+                監聽 fullscreenchange 而不是只在點擊時切換自己的狀態：
+                使用者按 F11／Esc 離開時不會經過這顆按鈕，沒有這個監聽
+                按鈕文字就會跟實際狀態對不上。
+
+                放大的樣式掛在 <html> 的 .board-fullscreen class 上，而不是
+                用 :fullscreen 偽類——舊瀏覽器只認得 :-webkit-full-screen，
+                而 CSS 選擇器清單只要其中一個不合法，整條規則會被整個丟掉
+                （不是只丟掉那一個選擇器），所以混寫前綴版跟標準版反而更
+                危險。自己掛 class 就完全不用碰這個相容性問題。
+            --}}
+            <div
+                x-data="{
+                    active: false,
+                    toggle() {
+                        if (document.fullscreenElement || document.webkitFullscreenElement) {
+                            (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+                        } else {
+                            const el = document.documentElement;
+                            (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+                        }
+                    },
+                    sync() {
+                        this.active = !! (document.fullscreenElement || document.webkitFullscreenElement);
+                        document.documentElement.classList.toggle('board-fullscreen', this.active);
+                    },
+                }"
+                x-on:fullscreenchange.document="sync()"
+                x-on:webkitfullscreenchange.document="sync()"
+            >
+                <button type="button" x-on:click="toggle()" class="btn-secondary" x-text="active ? '離開全螢幕' : '全螢幕'">
+                    全螢幕
+                </button>
             </div>
         </div>
     </div>

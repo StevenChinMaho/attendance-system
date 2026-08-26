@@ -65,6 +65,22 @@ class StatusBoardTest extends TestCase
             ->assertSee('即時點名看板');
     }
 
+    public function test_the_board_offers_a_fullscreen_toggle(): void
+    {
+        // 這個看板會被放在辦公室螢幕上常駐顯示——全螢幕按鈕本身，加上
+        // 掛在 <html> 上的 .board-fullscreen（真正把字放大的那組樣式
+        // 靠它生效，見 app.css）都要在。
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        Livewire::actingAs($admin)
+            ->test(StatusBoard::class)
+            ->assertSee('全螢幕')
+            ->assertSeeHtml('requestFullscreen')
+            ->assertSeeHtml('board-fullscreen')
+            ->assertSeeHtml('status-board');
+    }
+
     public function test_no_non_current_period_warning_is_shown_by_default(): void
     {
         $admin = User::factory()->create();

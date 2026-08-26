@@ -378,3 +378,64 @@
         margin: 12mm;
     }
 }
+
+/*
+ * 即時看板的全螢幕常駐模式（辦公室螢幕整天掛著看的情境）。
+ *
+ * 全螢幕本身「不會」讓字變大——requestFullscreen() 只是把瀏覽器外框讓
+ * 出來，頁面仍然以相同的 CSS 像素渲染。真正解決「字太小」的是下面這組
+ * 規則：解除看板的寬度上限（平常是 max-w-5xl，大螢幕上會置中留白，全
+ * 螢幕後只會更空），並把整體字級往上拉。兩者要一起才有效果。
+ *
+ * 掛在 <html> 的 .board-fullscreen class 上而不是 :fullscreen 偽類：
+ * 舊瀏覽器只認得 :-webkit-full-screen，而 CSS 選擇器清單只要有一個不
+ * 合法，整條規則會被整個丟棄（不是只丟那個選擇器），混寫前綴版反而更
+ * 容易整組失效。class 由 status-board.blade.php 的 Alpine 在
+ * fullscreenchange 時同步。
+ */
+.board-fullscreen nav {
+    /* 常駐顯示不需要導覽列，讓出垂直空間給表格。 */
+    display: none;
+}
+
+.board-fullscreen .status-board {
+    max-width: none;
+    padding: 1.5rem 2rem;
+}
+
+.board-fullscreen .status-board .page-title {
+    font-size: 1.875rem;
+    line-height: 2.25rem;
+}
+
+.board-fullscreen .status-board .page-subtitle {
+    font-size: 1rem;
+    line-height: 1.5rem;
+}
+
+.board-fullscreen .status-board .data-table {
+    font-size: 1.5rem;
+    line-height: 2rem;
+}
+
+.board-fullscreen .status-board .data-table thead {
+    font-size: 1.125rem;
+}
+
+.board-fullscreen .status-board .data-table th,
+.board-fullscreen .status-board .data-table td {
+    padding: 0.75rem 1rem;
+}
+
+/*
+ * 「需留意學生」欄位跟「未點名」那格在 Blade 裡是直接寫 text-xs 這種
+ * utility class，特異度跟 .data-table 一樣但排在後面（utilities layer
+ * 在 components 之後），單純調整 .data-table 的 font-size 蓋不過它們。
+ * 這裡用足夠具體的選擇器把它們一起拉大，不需要動到 !important。
+ */
+.board-fullscreen .status-board .data-table td span,
+.board-fullscreen .status-board .data-table td div,
+.board-fullscreen .status-board .data-table td[colspan] {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+}
