@@ -78,7 +78,11 @@ class StatusBoardTest extends TestCase
             ->assertSee('全螢幕')
             ->assertSeeHtml('requestFullscreen')
             ->assertSeeHtml('board-fullscreen')
-            ->assertSeeHtml('status-board');
+            ->assertSeeHtml('status-board')
+            // 全螢幕只留表格：標題／說明／日期／按鈕都掛 .board-chrome
+            // 被 CSS 藏起來，表格容器則要有 ref 讓 fit() 量得到高度。
+            ->assertSeeHtml('board-chrome')
+            ->assertSeeHtml('x-ref="tableWrap"');
     }
 
     public function test_no_non_current_period_warning_is_shown_by_default(): void

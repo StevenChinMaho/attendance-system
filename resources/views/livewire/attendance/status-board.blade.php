@@ -1,5 +1,89 @@
+{{--
+    全螢幕常駐顯示的邏輯放在這個內層 wrapper 上，不是放在 Livewire 元件
+    的根節點：根節點帶著 wire:poll.15s，每次輪詢 Livewire 都會 morph 它，
+    x-data 的狀態（目前算出來的字級、MutationObserver）會比較容易被重建。
+
+    fit() 用二分搜尋找出「剛好塞得下這個高度」的字級：全螢幕時 CSS 把
+    表格容器固定成剩餘高度且 overflow:hidden，這裡只負責找出讓
+    scrollHeight 不超過 clientHeight 的最大字級，避免要捲動才看得完。
+    表格內所有字級／內距在全螢幕時都改用 em（見 app.css），所以只要調
+    這一個根字級，整張表會等比例縮放。
+
+    MutationObserver 而不是掛 Livewire 的 hook：每 15 秒輪詢回來的資料
+    可能讓「需留意學生」變多、列變高，需要重算。用 DOM 層的觀察者跟
+    框架的內部 API 解耦，Livewire 換版本也不會壞。觀察對象是表格內容，
+    字級設在外層容器上，不會觸發自己再觀察到自己造成無限迴圈。
+--}}
 <div wire:poll.15s class="status-board mx-auto max-w-5xl px-4 py-10">
-    <div class="flex flex-wrap items-center justify-between gap-4">
+    <div
+        x-data="{
+            active: false,
+            observer: null,
+            toggle() {
+                if (document.fullscreenElement || document.webkitFullscreenElement) {
+                    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+                } else {
+                    const el = document.documentElement;
+                    (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+                }
+            },
+            sync() {
+                this.active = !! (document.fullscreenElement || document.webkitFullscreenElement);
+                document.documentElement.classList.toggle('board-fullscreen', this.active);
+
+                if (this.active) {
+                    this.$nextTick(() => this.fit());
+                } else {
+                    // 離開全螢幕要把 JS 設過的 inline 樣式清乾淨，否則放大
+                    // 後的字級會殘留在一般檢視上。
+                    this.$refs.tableWrap.style.fontSize = '';
+                    this.$refs.tableWrap.style.overflowY = '';
+                }
+            },
+            fit() {
+                if (! this.active) return;
+
+                const wrap = this.$refs.tableWrap;
+                let low = 8;
+                let high = 96;
+                let best = low;
+
+                for (let i = 0; i < 12; i++) {
+                    const mid = (low + high) / 2;
+                    wrap.style.fontSize = mid + 'px';
+
+                    if (wrap.scrollHeight <= wrap.clientHeight) {
+                        best = mid;
+                        low = mid;
+                    } else {
+                        high = mid;
+                    }
+                }
+
+                wrap.style.fontSize = best + 'px';
+
+                // 極端情況（班級太多／需留意學生太長）連最小字級都塞不下時，
+                // 容器的 overflow:hidden 會把後面的班級直接裁掉、而且完全
+                // 看不出來少了東西。這種時候寧可退回可捲動，也不要靜靜地
+                // 把資料藏起來——常駐看板上「漏掉一個班」比「要捲一下」
+                // 嚴重得多。
+                wrap.style.overflowY = wrap.scrollHeight > wrap.clientHeight ? 'auto' : 'hidden';
+            },
+            init() {
+                this.sync();
+
+                this.observer = new MutationObserver(() => this.$nextTick(() => this.fit()));
+                this.observer.observe(this.$refs.tableWrap, { childList: true, subtree: true, characterData: true });
+            },
+            destroy() {
+                this.observer?.disconnect();
+            },
+        }"
+        x-on:fullscreenchange.document="sync()"
+        x-on:webkitfullscreenchange.document="sync()"
+        x-on:resize.window.debounce.150ms="fit()"
+    >
+    <div class="board-chrome flex flex-wrap items-center justify-between gap-4">
         <div>
             <h1 class="page-title">即時點名看板</h1>
             <p class="page-subtitle mt-1">
@@ -30,19 +114,24 @@
             </div>
 
             {{--
-                這個看板會被放在辦公室的螢幕上整天常駐顯示，全螢幕是為了
-                把瀏覽器外框讓出來給內容——但光是全螢幕不會讓字變大，真正
-                解決「字太小」的是 app.css 裡 :fullscreen 那組規則（解除
-                寬度上限、字級整體放大）。兩者要一起才有效果。
+                這個看板會被放在辦公室的螢幕上整天常駐顯示。全螢幕時畫面
+                上只留表格本身，標題／說明／日期／這顆按鈕都會被藏起來
+                （.board-chrome，見 app.css），離開按 Esc。
 
-                對 document.documentElement 全螢幕，不是對看板那個 div：
-                這頁有 wire:poll.15s，每 15 秒 Livewire 會回來重繪 DOM，
-                如果全螢幕的目標節點在 morph 過程被換掉，瀏覽器會直接跳出
-                全螢幕，變成每 15 秒閃一次。<html> 永遠不會被 Livewire 動到。
+                光是全螢幕不會讓字變大——requestFullscreen() 只是把瀏覽器
+                外框讓出來，內容仍以相同的 CSS 像素渲染。真正解決「字太小」
+                的是上面 x-data 的 fit()：量出剩餘高度後二分搜尋出剛好塞得
+                下的字級，所以放大的同時也保證不會需要捲動。
+
+                對 document.documentElement 全螢幕，不是對表格容器：這頁有
+                wire:poll.15s，每 15 秒 Livewire 會回來重繪 DOM，如果全螢幕
+                的目標節點在 morph 過程被換掉，瀏覽器會直接跳出全螢幕，變成
+                每 15 秒閃一次。<html> 永遠不會被 Livewire 動到，「只顯示
+                表格」則交給 CSS 把其他東西藏起來，效果一樣但沒有這個風險。
 
                 監聽 fullscreenchange 而不是只在點擊時切換自己的狀態：
-                使用者按 F11／Esc 離開時不會經過這顆按鈕，沒有這個監聽
-                按鈕文字就會跟實際狀態對不上。
+                使用者按 Esc 離開時不會經過這顆按鈕，沒有這個監聽，
+                .board-fullscreen 這個 class 會留在 <html> 上收不回來。
 
                 放大的樣式掛在 <html> 的 .board-fullscreen class 上，而不是
                 用 :fullscreen 偽類——舊瀏覽器只認得 :-webkit-full-screen，
@@ -50,35 +139,15 @@
                 （不是只丟掉那一個選擇器），所以混寫前綴版跟標準版反而更
                 危險。自己掛 class 就完全不用碰這個相容性問題。
             --}}
-            <div
-                x-data="{
-                    active: false,
-                    toggle() {
-                        if (document.fullscreenElement || document.webkitFullscreenElement) {
-                            (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-                        } else {
-                            const el = document.documentElement;
-                            (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
-                        }
-                    },
-                    sync() {
-                        this.active = !! (document.fullscreenElement || document.webkitFullscreenElement);
-                        document.documentElement.classList.toggle('board-fullscreen', this.active);
-                    },
-                }"
-                x-on:fullscreenchange.document="sync()"
-                x-on:webkitfullscreenchange.document="sync()"
-            >
-                <button type="button" x-on:click="toggle()" class="btn-secondary" x-text="active ? '離開全螢幕' : '全螢幕'">
-                    全螢幕
-                </button>
-            </div>
+            <button type="button" x-on:click="toggle()" class="btn-secondary" title="全螢幕時只顯示表格本身，按 Esc 離開">
+                全螢幕
+            </button>
         </div>
     </div>
 
-    <p class="mt-2 text-xs text-slate-400 dark:text-slate-500">每 15 秒自動更新一次。上午/中午/下午三個時段一次顯示，遲到算「出席」、早退算「缺席」。</p>
+    <p class="board-chrome mt-2 text-xs text-slate-400 dark:text-slate-500">每 15 秒自動更新一次。上午/中午/下午三個時段一次顯示，遲到算「出席」、早退算「缺席」。</p>
 
-    <div class="table-wrap mt-4">
+    <div x-ref="tableWrap" class="table-wrap mt-4">
         <table class="data-table">
             {{--
                 班級／應到／需留意學生各自 rowspan 兩列，時段名稱橫跨
@@ -191,5 +260,6 @@
                 @endforelse
             </tbody>
         </table>
+    </div>
     </div>
 </div>
