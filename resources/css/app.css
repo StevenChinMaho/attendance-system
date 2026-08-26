@@ -383,27 +383,24 @@
 /*
  * 即時看板的全螢幕常駐模式（辦公室螢幕整天掛著看的情境）。
  *
- * 兩件事一起做才有意義：
- *
  * 1. 畫面上只留表格本身——標題、說明、日期、按鈕、導覽列全部藏起來
  *    （.board-chrome / nav）。做法是「把其他東西藏掉」而不是真的對表格
  *    容器呼叫 requestFullscreen()：那個容器在 Livewire 元件裡面，這頁
  *    每 15 秒輪詢一次，全螢幕的目標節點一旦被 morph 換掉，瀏覽器會直接
  *    跳出全螢幕。全螢幕永遠掛在 <html> 上，視覺結果一樣但沒這個風險。
  *
- * 2. 字級由 JS 動態決定，不是寫死的放大倍率——見 status-board.blade.php
- *    的 fit()。這裡負責把表格容器固定成「視窗高度扣掉內距」並且
- *    overflow:hidden，JS 才有一個明確的 clientHeight 可以二分搜尋出剛好
- *    塞得下的字級。寫死倍率沒辦法同時滿足「字夠大」跟「不用捲動」，
- *    班級數量不同、需留意學生多寡不同，能塞的字級本來就不一樣。
+ * 2. 字級由 JS 動態決定（見 status-board.blade.php 的 fit()），這裡負責
+ *    把表格容器固定成「視窗高度扣掉內距」，JS 才有一個明確的 clientHeight
+ *    可以二分搜尋出剛好塞得下的字級。寫死倍率沒辦法同時滿足「字夠大」
+ *    跟「不用捲動」，能塞的字級隨班級數與需留意學生多寡而不同。
  *
- * 表格內部的字級與內距在這個模式下一律改用 em，全部相對於容器上那一個
- * 由 JS 設定的根字級，所以只要調一個數字整張表就等比例縮放。
- *
- * 掛在 <html> 的 .board-fullscreen class 上而不是 :fullscreen 偽類：
- * 舊瀏覽器只認得 :-webkit-full-screen，而 CSS 選擇器清單只要有一個不
- * 合法，整條規則會被整個丟棄（不是只丟那個選擇器），混寫前綴版反而更
- * 容易整組失效。
+ * 高度鏈一定要一路接到 .table-wrap，中間不能斷：.status-board（Livewire
+ * 元件根節點）→ .board-shell（Alpine 的 x-data wrapper）→ .table-wrap。
+ * flex 屬性只對「flex 容器的直接子項」生效，曾經因為 .board-shell 是普通
+ * 區塊，.table-wrap 的 flex:1/min-height:0 完全沒作用、高度變成 auto，
+ * scrollHeight 永遠等於 clientHeight，二分搜尋因此每次都判定「塞得下」
+ * 而直接選到上限 96px（畫面上只看得到前兩班、又不能捲動）。改動這段時
+ * 務必確認這條鏈還是完整的。
  */
 .board-fullscreen nav,
 .board-fullscreen .board-chrome {
@@ -415,24 +412,39 @@
 }
 
 .board-fullscreen .status-board {
-    display: flex;
-    flex-direction: column;
     box-sizing: border-box;
     max-width: none;
     height: 100vh;
     padding: 0.75rem;
 }
 
+.board-fullscreen .board-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
 /*
- * flex-1 + min-height:0 讓容器吃掉剩下的高度、而且真的會被壓縮到那個
- * 高度（少了 min-height:0，flex 子項的預設 min-height:auto 會讓它被內容
- * 撐開、永遠不會溢出，JS 的二分搜尋就失去判斷依據）。
+ * min-height:0 是必要的：flex 子項預設 min-height:auto 會被內容撐開，
+ * 永遠不會回報溢出，JS 的二分搜尋就失去判斷依據（同上，會直接選到上限）。
  */
-.board-fullscreen .status-board .table-wrap {
+.board-fullscreen .board-shell .table-wrap {
     flex: 1;
     min-height: 0;
     margin: 0;
     overflow: hidden;
+    /*
+     * 字級透過 <html> 上的 CSS 變數傳進來，不是由 JS 直接寫 inline style
+     * ——這個容器在 Livewire 元件內，每 15 秒輪詢 morph 時，伺服器回傳的
+     * HTML 沒有那個 style 屬性，morph 會把它抹掉，字級就會突然掉回未放大
+     * 的 0.875rem。變數掛在 <html> 上，Livewire 永遠不會動到。
+     */
+    font-size: var(--board-font-size, 1rem);
+}
+
+.board-fullscreen.board-overflow .board-shell .table-wrap {
+    overflow-y: auto;
 }
 
 .board-fullscreen .status-board .data-table {
@@ -452,8 +464,7 @@
  * 「需留意學生」欄位跟「未點名」那格在 Blade 裡直接寫了 text-xs 這種
  * utility class，特異度跟 .data-table 一樣但排在後面（utilities layer
  * 在 components 之後），單純調 .data-table 的 font-size 蓋不過它們。
- * 這裡用足夠具體的選擇器改成相對單位，跟著容器字級一起縮放，不需要
- * 動用 !important。
+ * 這裡用足夠具體的選擇器改成相對單位，跟著容器字級一起縮放。
  */
 .board-fullscreen .status-board .data-table td span,
 .board-fullscreen .status-board .data-table td div,

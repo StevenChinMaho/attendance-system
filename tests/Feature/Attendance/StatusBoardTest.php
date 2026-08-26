@@ -82,7 +82,12 @@ class StatusBoardTest extends TestCase
             // 全螢幕只留表格：標題／說明／日期／按鈕都掛 .board-chrome
             // 被 CSS 藏起來，表格容器則要有 ref 讓 fit() 量得到高度。
             ->assertSeeHtml('board-chrome')
-            ->assertSeeHtml('x-ref="tableWrap"');
+            ->assertSeeHtml('x-ref="tableWrap"')
+            // .board-shell 是 .status-board 與 .table-wrap 之間那一層——
+            // 全螢幕的高度鏈（flex 容器 → flex:1 的表格容器）必須一路
+            // 接得起來，中間只要有一層不是 flex 容器，表格高度就會變成
+            // auto、永遠不回報溢出，字級二分搜尋會直接選到上限。
+            ->assertSeeHtml('board-shell');
     }
 
     public function test_no_non_current_period_warning_is_shown_by_default(): void

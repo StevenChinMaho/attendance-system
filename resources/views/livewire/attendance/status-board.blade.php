@@ -32,25 +32,44 @@
                 document.documentElement.classList.toggle('board-fullscreen', this.active);
 
                 if (this.active) {
-                    this.$nextTick(() => this.fit());
+                    this.schedule();
                 } else {
-                    // 離開全螢幕要把 JS 設過的 inline 樣式清乾淨，否則放大
-                    // 後的字級會殘留在一般檢視上。
-                    this.$refs.tableWrap.style.fontSize = '';
-                    this.$refs.tableWrap.style.overflowY = '';
+                    document.documentElement.style.removeProperty('--board-font-size');
+                    document.documentElement.classList.remove('board-overflow');
                 }
+            },
+            /*
+             * 等版面真的重排完再量。fullscreenchange 觸發的當下瀏覽器還在
+             * 做全螢幕轉場，此時量到的高度不是最終值；$nextTick 只是
+             * microtask，排在瀏覽器重排之前，量到的一樣是舊值。連續兩個
+             * requestAnimationFrame 才能確定跨過一次真正的重排。
+             */
+            schedule() {
+                requestAnimationFrame(() => requestAnimationFrame(() => this.fit()));
             },
             fit() {
                 if (! this.active) return;
 
                 const wrap = this.$refs.tableWrap;
+                const root = document.documentElement;
+                const apply = (size) => root.style.setProperty('--board-font-size', size + 'px');
+
+                // 版面還沒成形時量出來的高度沒有意義，硬算會得到一個過小
+                // 或過大的字級並且就這樣停在那裡（下次重算要等輪詢或
+                // 改變視窗大小）。這種時候直接重排一次再試。
+                if (wrap.clientHeight < 50) {
+                    this.schedule();
+
+                    return;
+                }
+
                 let low = 8;
                 let high = 96;
                 let best = low;
 
                 for (let i = 0; i < 12; i++) {
                     const mid = (low + high) / 2;
-                    wrap.style.fontSize = mid + 'px';
+                    apply(mid);
 
                     if (wrap.scrollHeight <= wrap.clientHeight) {
                         best = mid;
@@ -60,19 +79,19 @@
                     }
                 }
 
-                wrap.style.fontSize = best + 'px';
+                apply(best);
 
                 // 極端情況（班級太多／需留意學生太長）連最小字級都塞不下時，
                 // 容器的 overflow:hidden 會把後面的班級直接裁掉、而且完全
                 // 看不出來少了東西。這種時候寧可退回可捲動，也不要靜靜地
                 // 把資料藏起來——常駐看板上「漏掉一個班」比「要捲一下」
                 // 嚴重得多。
-                wrap.style.overflowY = wrap.scrollHeight > wrap.clientHeight ? 'auto' : 'hidden';
+                root.classList.toggle('board-overflow', wrap.scrollHeight > wrap.clientHeight);
             },
             init() {
                 this.sync();
 
-                this.observer = new MutationObserver(() => this.$nextTick(() => this.fit()));
+                this.observer = new MutationObserver(() => this.schedule());
                 this.observer.observe(this.$refs.tableWrap, { childList: true, subtree: true, characterData: true });
             },
             destroy() {
@@ -81,7 +100,8 @@
         }"
         x-on:fullscreenchange.document="sync()"
         x-on:webkitfullscreenchange.document="sync()"
-        x-on:resize.window.debounce.150ms="fit()"
+        x-on:resize.window.debounce.150ms="schedule()"
+        class="board-shell"
     >
     <div class="board-chrome flex flex-wrap items-center justify-between gap-4">
         <div>
