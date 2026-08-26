@@ -29,7 +29,7 @@
         </div>
     </div>
 
-    <p class="mt-2 text-xs text-slate-400 dark:text-slate-500">每 15 秒自動更新一次。早/中/下午三個時段一次顯示，遲到算「出席」、早退算「缺席」。</p>
+    <p class="mt-2 text-xs text-slate-400 dark:text-slate-500">每 15 秒自動更新一次。上午/中午/下午三個時段一次顯示，遲到算「出席」、早退算「缺席」。</p>
 
     <div class="table-wrap mt-4">
         <table class="data-table">

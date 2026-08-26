@@ -20,7 +20,7 @@ namespace App\Livewire\Concerns;
 final class AttendancePeriods
 {
     public const PERIODS = [
-        'MORNING' => '早上',
+        'MORNING' => '上午',
         'NOON' => '中午',
         'AFTERNOON' => '下午',
     ];
