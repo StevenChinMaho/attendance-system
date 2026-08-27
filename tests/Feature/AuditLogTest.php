@@ -161,18 +161,20 @@ class AuditLogTest extends TestCase
     {
         $user = User::factory()->create(['username' => 'teacher1', 'password' => 'a-strong-password']);
 
-        $this->post('/login', [
-            'username' => 'teacher1',
-            'password' => 'a-strong-password',
-        ], ['X-Forwarded-For' => '203.0.113.9']);
+        // nginx 會把 CF-Connecting-IP 還原到 REMOTE_ADDR，這裡直接
+        // 模擬那個結果（X-Forwarded-For 刻意不被信任，見 TrustedProxiesTest）。
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.9'])
+            ->post('/login', [
+                'username' => 'teacher1',
+                'password' => 'a-strong-password',
+            ]);
 
         $log = $this->logs(AuditLog::AUTH)->first();
 
         $this->assertSame('登入成功', $log->description);
         $this->assertTrue($user->is($log->causer));
         $this->assertSame('teacher1', $log->properties['username']);
-        // IP 要是真實的客戶端位址，不是最後一跳的代理——這依賴
-        // bootstrap/app.php 的 trustProxies，見 TrustedProxiesTest。
+        // IP 要是真實的客戶端位址，不是最後一跳的代理。
         $this->assertSame('203.0.113.9', $log->properties['ip']);
     }
 
@@ -196,10 +198,11 @@ class AuditLogTest extends TestCase
      */
     public function test_an_unknown_username_is_not_written_into_the_log(): void
     {
-        $this->post('/login', [
-            'username' => 'this-might-actually-be-a-password',
-            'password' => 'whatever',
-        ], ['X-Forwarded-For' => '203.0.113.9']);
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.9'])
+            ->post('/login', [
+                'username' => 'this-might-actually-be-a-password',
+                'password' => 'whatever',
+            ]);
 
         $log = $this->logs(AuditLog::AUTH)->first();
 

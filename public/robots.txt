@@ -1,2 +1,9 @@
+# 這是校內非公開系統：除了登入頁以外，所有路由都需要登入才進得去，
+# 沒有任何值得被搜尋引擎索引的公開內容。
+#
+# 注意 robots.txt 只是「請不要抓取」，不是「請不要索引」——被 Disallow
+# 的網址如果從別處被連到，仍然可能以「只有網址、沒有內容」的形式出現在
+# 搜尋結果裡。真正阻止索引的是 X-Robots-Tag: noindex 這個回應標頭，
+# 設定在 docker/production/nginx.conf。兩層一起做。
 User-agent: *
-Disallow:
+Disallow: /

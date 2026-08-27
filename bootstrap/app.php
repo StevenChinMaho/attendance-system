@@ -42,10 +42,27 @@ return Application::configure(basePath: dirname(__DIR__))
         // 這個容器的只有同一個 docker network 裡的 nginx 與 cloudflared，
         // 而容器 IP 每次重建都會變，寫死反而會在某次重啟後靜默失效。
         // 真正把外部流量擋在門外的是「沒有對外開放的 port」，不是這裡。
+        //
+        // **headers 刻意不包含 HEADER_X_FORWARDED_FOR。** 客戶端 IP 改由
+        // nginx 從 CF-Connecting-IP 還原成 REMOTE_ADDR（見
+        // docker/production/nginx.conf 的 real_ip 設定），Laravel 直接用
+        // REMOTE_ADDR 即可。
+        //
+        // 為什麼不能信任 X-Forwarded-For：Cloudflare 對這個標頭是「附加」
+        // 而不是覆寫，訪客自己送一個 `X-Forwarded-For: 1.2.3.4` 進來，
+        // 到達應用程式時會變成 `1.2.3.4, <真實IP>`；而 Symfony 在所有
+        // 代理都受信任時取的是最左邊那個，於是 request->ip() 回傳偽造值
+        // ——實測確認過。稽核紀錄的登入來源 IP 如果可以被訪客自己指定，
+        // 那份紀錄就沒有證據價值了（見 App\Support\AuditLog）。
+        // CF-Connecting-IP 則是 Cloudflare 一律覆寫，偽造不了。
+        //
+        // 其餘三個標頭仍然要信任：HTTPS 判斷（PROTO）與主機名（HOST）
+        // 沒有別的來源，而且它們被偽造的後果小得多——PROTO 被改只會讓
+        // 已經是 HTTPS 的連線被誤判成 HTTP（cookie 反而更嚴格），HOST
+        // 另外有 trustHosts() 白名單把關。
         $middleware->trustProxies(
             at: '*',
-            headers: Request::HEADER_X_FORWARDED_FOR
-                | Request::HEADER_X_FORWARDED_HOST
+            headers: Request::HEADER_X_FORWARDED_HOST
                 | Request::HEADER_X_FORWARDED_PORT
                 | Request::HEADER_X_FORWARDED_PROTO,
         );
