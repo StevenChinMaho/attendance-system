@@ -84,15 +84,46 @@
 
 ## 3. 從零建置
 
-### 3.1 取得程式碼
+### 3.1 建立部署帳號並取得程式碼（不要用 root 操作）
+
+**這套部署沒有任何一個環節需要 root。** 值得先花兩分鐘設定好，否則整個維運
+過程都會泡在 root shell 裡：
+
+- 沒有任何容器對 host 發佈 port，所以不需要綁定 1024 以下的特權埠
+  （tunnel 架構順帶帶來的好處）。
+- `compose.production.yaml` 沒有任何 host bind mount，只有一個 named volume，
+  所以不會有 host 端檔案權限／UID 對應的問題。
+- 唯一需要的特權是存取 docker socket，加入 `docker` 群組就有了。
 
 ```bash
-sudo mkdir -p /opt && cd /opt
-sudo git clone <這個 repo 的網址> attendance-system
-cd attendance-system
+# 用既有的帳號也可以，這裡示範建一個專用的
+sudo adduser --disabled-password --gecos '' deploy
+sudo usermod -aG docker deploy
 ```
 
-（往後所有指令都在 `/opt/attendance-system` 底下執行。）
+```bash
+# 專案目錄歸這個帳號所有，之後 git pull / 編輯 .env 都不需要 sudo
+sudo mkdir -p /opt/attendance-system
+sudo chown deploy:deploy /opt/attendance-system
+```
+
+之後一律以 `deploy` 登入操作（`su - deploy` 或直接用它 ssh 進來）：
+
+```bash
+git clone <這個 repo 的網址> /opt/attendance-system
+cd /opt/attendance-system
+```
+
+（往後所有指令都在 `/opt/attendance-system` 底下、以 `deploy` 身分執行。）
+
+> **要誠實說清楚 `docker` 群組的界線**：能存取 docker socket 的帳號，實際上
+> 可以把 host 的根目錄掛進容器裡拿到 root，所以「加入 docker 群組」在
+> **抵禦刻意攻擊**這件事上跟 root 差不多，這是 Docker 官方自己也載明的。
+> 它真正買到的是另外兩件事，而這兩件事才是日常維運會遇到的：**打錯的指令
+> 不會用 root 的權限執行**（一個手滑的 `rm -rf` 只會炸掉這個帳號摸得到的
+> 東西，不是整台機器），以及**誰做了什麼有跡可循**。要更嚴格的隔離就得上
+> rootless Docker，但那會多出一整套網路與儲存的設定要處理，對一台只跑這個
+> 系統的校內主機而言不成比例——除非你有明確的稽核要求。
 
 ### 3.2 建立 `.env.production`
 
@@ -121,7 +152,7 @@ chmod 600 .env.production
 正式環境的每個 compose 指令都必須帶兩個旗標，漏掉任何一個都會出事，所以先包成函式：
 
 ```bash
-# 加到 ~/.bashrc
+# 加到 deploy 帳號的 ~/.bashrc（不是 root 的——見 3.1）
 attendance() {
     (cd /opt/attendance-system && \
      docker compose --env-file .env.production -f compose.production.yaml "$@")
@@ -451,6 +482,34 @@ session 寫不進去或 cookie 沒被瀏覽器接受。檢查：
 但如果拿掉了那個 `name:`，compose 會用目錄名稱當專案名，兩邊就會撞在一起，正式環境
 的設定會把 Sail 的 mariadb 容器直接接管重建。**不要拿掉 `compose.production.yaml`
 最上面的 `name:`。**
+
+**已經整套用 root 部署好了，想改成一般帳號**
+
+不需要重建任何容器或資料——容器與 volume 是 docker daemon 管的、跟哪個使用者下的
+指令無關，換帳號之後 `attendance ps` 看到的還是同一組東西。以 root 執行：
+
+```bash
+# 1. 建立帳號並給 docker 權限
+adduser --disabled-password --gecos '' deploy
+usermod -aG docker deploy
+
+# 2. 專案目錄改成它所有（.env.production 的 600 權限會跟著保留）
+chown -R deploy:deploy /opt/attendance-system
+
+# 3. 把 attendance 這個函式從 root 的 ~/.bashrc 搬到 deploy 的
+#    （手動編輯兩個檔案，別直接 cat 過去，root 的 bashrc 裡通常還有別的東西）
+```
+
+之後改用 `deploy` 登入。確認一下能正常操作：
+
+```bash
+su - deploy
+attendance ps          # 應該看得到原本那四個容器
+```
+
+都正常之後，再考慮把 root 的 SSH 直接登入關掉（`/etc/ssh/sshd_config` 的
+`PermitRootLogin no`，改完 `systemctl restart ssh`）——**先確認 deploy 這個帳號
+真的登得進來再關**，不然會把自己鎖在門外。
 
 ---
 
