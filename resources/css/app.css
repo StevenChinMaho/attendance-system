@@ -277,10 +277,94 @@
         @apply bg-slate-50 dark:bg-slate-800/40;
     }
 
+    /*
+     * 每一列高度一致，給「某些列有按鈕、某些列沒有」的表格用
+     * （身分管理：內建身分的權限鎖住、不顯示刪除按鈕，自訂身分才有）。
+     * 沒有這條的話，有按鈕的列會比沒按鈕的列高，看起來像排版壞掉。
+     *
+     * 2.5rem 的來源：儲存格的 py-2 上下各 0.5rem（共 1rem）＋ .btn-xs
+     * 的高度 1.5rem（text-xs 的 line-height 1rem ＋ py-1 上下各 0.25rem）。
+     * 也就是「對齊到最高的那一種列」。table layout 裡 height 的行為本來
+     * 就是最小高度，內容真的更高時還是會被撐開，不會被裁掉。
+     */
+    .data-table-uniform-rows td {
+        height: 2.5rem;
+    }
+
     /* 一列裡並排的多個操作（管理學生／點名／編輯…），每個都是有邊框的
        獨立按鈕，靠 gap 拉開距離，不再是黏在一起的純底線文字連結。 */
     .action-group {
         @apply flex flex-wrap justify-end gap-2;
+    }
+
+    /*
+     * 表格上方的搜尋／篩選列。每個欄位是一組 label + 控制項，靠 flex
+     * 換行，視窗窄的時候會自己疊成多行而不是把輸入框壓扁。
+     * 「清除條件」按鈕用 items-end 對齊到跟輸入框同一條基線上。
+     */
+    .filter-bar {
+        @apply flex flex-wrap items-end gap-3;
+    }
+
+    .filter-field {
+        @apply min-w-40;
+    }
+
+    /*
+     * 表格排序用的欄位標題。整個標題是一顆按鈕（點哪裡都能排序）。
+     *
+     * 上下兩個三角形「永遠都畫」，只是把目前作用中的那一個換成強調色
+     * ——這樣使用者不用把游標移過去才知道「原來這幾欄可以點」，而且
+     * 升冪/降冪是哪一個方向一眼就看得出來。只畫單一個三角形的話，
+     * 沒有排序中的欄位要嘛完全看不到提示、要嘛畫一個方向不明的箭頭。
+     */
+    .sort-header {
+        @apply flex w-full items-center gap-1.5 text-left uppercase transition-colors hover:text-slate-800 dark:hover:text-slate-100;
+    }
+
+    .sort-indicator {
+        @apply inline-flex shrink-0 flex-col text-[0.5rem] leading-[0.75] text-slate-300 dark:text-slate-600;
+    }
+
+    .sort-indicator-active {
+        @apply text-indigo-600 dark:text-indigo-400;
+    }
+
+    /*
+     * 分頁列。取代 Livewire 內建的 livewire::tailwind——那份用的是
+     * gray-*（本專案一律用 slate-*）色階，跟其他頁面元件放在一起會有
+     * 明顯的色調落差，而且它整個包在 @if ($paginator->hasPages()) 裡，
+     * 只有一頁時什麼都不畫，連「總共幾筆」都看不到。
+     * 覆寫檔在 resources/views/vendor/livewire/tailwind.blade.php。
+     */
+    .pagination {
+        @apply flex flex-wrap items-center justify-between gap-3;
+    }
+
+    .pagination-summary {
+        @apply text-xs text-slate-500 dark:text-slate-400;
+    }
+
+    .pagination-controls {
+        @apply flex items-center gap-1;
+    }
+
+    .pagination-status {
+        @apply px-2 text-sm tabular-nums text-slate-600 dark:text-slate-300;
+    }
+
+    .pagination-btn {
+        @apply btn border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:border-slate-400 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-slate-500 dark:hover:bg-slate-700;
+    }
+
+    /*
+     * 已經在第一頁／最後一頁時要「看得出來按不下去」。理由跟
+     * .field-checkbox:disabled 那段一樣：不能只靠瀏覽器預設的停用樣式，
+     * 它在深色模式下幾乎跟正常狀態分不出來。這裡明確把邊框、底色、
+     * 文字都換成低對比的一組，並且拿掉 hover 效果與游標提示。
+     */
+    .pagination-btn:disabled {
+        @apply cursor-not-allowed border-slate-200 bg-slate-50 text-slate-300 hover:border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-600 dark:hover:border-slate-700 dark:hover:bg-slate-900;
     }
 }
 
