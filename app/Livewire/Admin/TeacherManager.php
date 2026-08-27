@@ -3,17 +3,63 @@
 namespace App\Livewire\Admin;
 
 use App\Livewire\Concerns\RequiresPermission;
+use App\Livewire\Concerns\SortsColumns;
 use App\Models\Teacher;
 use App\Models\User;
 use App\Rules\UserAccountIsUnlinked;
+use Illuminate\Contracts\Database\Query\Builder;
 use Livewire\Component;
 use Livewire\WithPagination;
 
 class TeacherManager extends Component
 {
-    use RequiresPermission, WithPagination;
+    use RequiresPermission, SortsColumns, WithPagination;
 
     protected string $requiredPermission = 'teachers.manage';
+
+    public string $search = '';
+
+    public function updatedSearch(): void
+    {
+        $this->resetPage();
+    }
+
+    public function clearFilters(): void
+    {
+        $this->reset('search');
+        $this->resetPage();
+    }
+
+    public function hasActiveFilters(): bool
+    {
+        return $this->search !== '';
+    }
+
+    /**
+     * 姓名這一欄畫面上顯示的是 displayName()——有連結帳號時優先用帳號的
+     * 姓名，沒有才用 teachers.teacher_name（見 HasLinkableAccountName）。
+     * 排序也必須照同一個規則，否則畫面上明明是照姓名排，卻會有幾列
+     * 「看起來沒排到」——那些正是有連結帳號的老師。
+     *
+     * COALESCE 裡的欄位名是寫死的字串，$direction 只會是 'asc'／'desc'
+     * （SortsColumns::activeSortDirection() 保證），沒有客戶端輸入被串
+     * 進 SQL。
+     *
+     * @return array<string, string|\Closure>
+     */
+    protected function sortableColumns(): array
+    {
+        return [
+            'name' => fn (Builder $query, string $direction) => $query
+                ->orderByRaw("COALESCE(users.name, teachers.teacher_name) {$direction}"),
+            'username' => 'users.username',
+        ];
+    }
+
+    protected function defaultSortColumn(): string
+    {
+        return 'name';
+    }
 
     public string $teacherName = '';
 
@@ -124,8 +170,26 @@ class TeacherManager extends Component
 
     public function render()
     {
+        // leftJoin 而不是 whereHas：姓名的排序與搜尋都要同時看得到
+        // teachers.teacher_name 與 users.name（見 sortableColumns()），
+        // 而且沒有連結帳號的老師不能因為 join 而消失，所以是 left join。
+        // select('teachers.*') 不能省——不然 users 的 id/name 會蓋掉
+        // Teacher model 自己的欄位。
+        $teachers = Teacher::query()
+            ->select('teachers.*')
+            ->leftJoin('users', 'users.id', '=', 'teachers.user_id')
+            ->with('user')
+            ->when($this->search !== '', function (Builder $query) {
+                $term = '%'.$this->search.'%';
+
+                $query->where(fn (Builder $inner) => $inner
+                    ->where('teachers.teacher_name', 'like', $term)
+                    ->orWhere('users.name', 'like', $term)
+                    ->orWhere('users.username', 'like', $term));
+            });
+
         return view('livewire.admin.teacher-manager', [
-            'teachers' => Teacher::with('user')->orderBy('teacher_name')->paginate(15),
+            'teachers' => $this->applySort($teachers)->paginate(15),
             'availableUsers' => User::availableForLinking(exceptTeacherId: $this->editingTeacherId)
                 ->orderBy('name')
                 ->get(),

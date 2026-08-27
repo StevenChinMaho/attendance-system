@@ -49,9 +49,12 @@
     @endif
 
     <div class="table-wrap mt-6">
-        <table class="data-table">
+        {{-- data-table-uniform-rows：內建身分那幾列沒有「刪除」按鈕
+             （權限鎖住、不能刪），自訂身分那幾列有，而按鈕比純文字高
+             一點，會讓前三列明顯比後面矮。見 app.css 的說明。 --}}
+        <table class="data-table data-table-uniform-rows">
             <colgroup>
-                <col style="width: 14%">
+                <col style="width: 16%">
                 @foreach ($permissions as $permission)
                     <col>
                 @endforeach

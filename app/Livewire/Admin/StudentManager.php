@@ -4,10 +4,13 @@ namespace App\Livewire\Admin;
 
 use App\Livewire\Concerns\RequiresPermission;
 use App\Livewire\Concerns\ScopesToSelectedAcademicPeriod;
+use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\User;
 use App\Rules\UserAccountIsUnlinked;
+use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Validation\Rule;
+use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -26,6 +29,71 @@ class StudentManager extends Component
     use RequiresPermission, ScopesToSelectedAcademicPeriod, WithPagination;
 
     protected string $requiredPermission = 'students.manage';
+
+    /**
+     * 全校學生動輒好幾百人，翻頁翻不到人——搜尋（學號／姓名／登入帳號）
+     * 與三個下拉篩選（性別／目前班級／在讀狀態）是這一頁的主要導覽方式。
+     */
+    public string $search = '';
+
+    public string $genderFilter = '';
+
+    /**
+     * 班級篩選的值：空字串＝全部，'none'＝目前這個學年度／學期沒有班級，
+     * 其餘是 school_classes.id。'none' 這個特例是必要的——匯入完但還沒
+     * 編班的學生正是最需要被找出來處理的一群，沒有這個選項就只能一頁一頁
+     * 翻著找「未加入班級」。
+     */
+    public string $classFilter = '';
+
+    public string $statusFilter = '';
+
+    public function updatedSearch(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedGenderFilter(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedClassFilter(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedStatusFilter(): void
+    {
+        $this->resetPage();
+    }
+
+    public function clearFilters(): void
+    {
+        $this->reset(['search', 'genderFilter', 'classFilter', 'statusFilter']);
+        $this->resetPage();
+    }
+
+    public function hasActiveFilters(): bool
+    {
+        return $this->search !== ''
+            || $this->genderFilter !== ''
+            || $this->classFilter !== ''
+            || $this->statusFilter !== '';
+    }
+
+    /**
+     * 切換學年度／學期時，原本選的班級可能根本不屬於新的期間，留著會
+     * 變成「篩選條件看起來是空的，但表格一筆都沒有」。這個方法名稱跟
+     * ScopesToSelectedAcademicPeriod 裡那個空的監聽器不同，Livewire 會
+     * 把同一個事件的所有監聽方法都呼叫一次（見 CLAUDE.md）。
+     */
+    #[On('academic-period-changed')]
+    public function resetClassFilterOnPeriodChange(): void
+    {
+        $this->reset('classFilter');
+        $this->resetPage();
+    }
 
     public string $studentNumber = '';
 
@@ -280,17 +348,63 @@ class StudentManager extends Component
             // 同理 eager load，狀態欄要用它判斷「在讀」/「已轉出」。
             // withCount 而不是每一列各自呼叫 hasAttendanceHistory()：後者
             // 對每個學生都會多發一次查詢，這裡一次查完。
-            'students' => Student::with(['user', 'currentDeparture'])
-                ->with(['schoolClasses' => fn ($query) => $query
-                    ->where('academic_year', $this->selectedAcademicYear)
-                    ->where('semester', $this->selectedSemester)
-                    ->orderByClassNumber()])
-                ->withCount('attendanceRecords')
-                ->orderBy('student_number')
-                ->paginate(15),
+            'students' => $this->filteredStudents()->orderBy('student_number')->paginate(15),
             'availableUsers' => User::availableForLinking(exceptStudentId: $this->editingStudentId)
                 ->orderBy('name')
                 ->get(),
+            // 班級篩選的選項只列出目前選取學年度／學期的班級——「目前班級」
+            // 欄本來就只顯示這個範圍（見上面的 eager load），選單列出範圍外
+            // 的班級只會篩出空結果。
+            'filterableClasses' => SchoolClass::query()
+                ->where('academic_year', $this->selectedAcademicYear)
+                ->where('semester', $this->selectedSemester)
+                ->orderByClassNumber()
+                ->get(),
         ]);
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<Student>
+     */
+    protected function filteredStudents(): \Illuminate\Database\Eloquent\Builder
+    {
+        return Student::with(['user', 'currentDeparture'])
+            ->with(['schoolClasses' => fn ($query) => $query
+                ->where('academic_year', $this->selectedAcademicYear)
+                ->where('semester', $this->selectedSemester)
+                ->orderByClassNumber()])
+            ->withCount('attendanceRecords')
+            ->when($this->search !== '', function (Builder $query) {
+                // 括號包住整組 OR，否則會跟後面的性別／班級／狀態條件
+                // 攤平成同一層，篩選等於失效。
+                $term = '%'.$this->search.'%';
+
+                $query->where(fn (Builder $inner) => $inner
+                    ->where('student_number', 'like', $term)
+                    ->orWhere('name', 'like', $term)
+                    // 姓名欄顯示的是 displayName()，有連結帳號時優先用
+                    // 帳號的姓名，所以連 users.name 一起找；username 是
+                    // 使用者明確要求的搜尋條件之一。
+                    ->orWhereHas('user', fn (Builder $user) => $user
+                        ->where('name', 'like', $term)
+                        ->orWhere('username', 'like', $term)));
+            })
+            ->when(
+                in_array($this->genderFilter, ['男', '女'], true),
+                fn (Builder $query) => $query->where('gender', $this->genderFilter),
+            )
+            ->when($this->classFilter === 'none', fn (Builder $query) => $query
+                ->whereDoesntHave('schoolClasses', fn (Builder $class) => $class
+                    ->where('academic_year', $this->selectedAcademicYear)
+                    ->where('semester', $this->selectedSemester)))
+            ->when(ctype_digit($this->classFilter), fn (Builder $query) => $query
+                ->whereHas('schoolClasses', fn (Builder $class) => $class
+                    ->where('school_classes.id', (int) $this->classFilter)))
+            // 「已轉出」＝目前有一段還沒結束的轉出期間，跟
+            // Student::currentDeparture() 用的是同一個條件。
+            ->when($this->statusFilter === 'enrolled', fn (Builder $query) => $query
+                ->whereDoesntHave('departures', fn (Builder $departure) => $departure->whereNull('returned_at')))
+            ->when($this->statusFilter === 'left', fn (Builder $query) => $query
+                ->whereHas('departures', fn (Builder $departure) => $departure->whereNull('returned_at')));
     }
 }

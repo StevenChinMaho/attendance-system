@@ -56,27 +56,78 @@
         </form>
     @endif
 
-    <div class="table-wrap mt-6">
+    {{-- 搜尋／篩選列。帳號數量會多到光靠翻頁找不到人，所以放在表格正
+         上方而不是收在某個展開面板裡。 --}}
+    <div class="filter-bar mt-6">
+        <div class="filter-field grow">
+            <label class="field-label">搜尋姓名或帳號</label>
+            <input
+                type="search"
+                wire:model.live.debounce.300ms="search"
+                placeholder="輸入姓名或登入帳號…"
+                class="field-input"
+            >
+        </div>
+
+        <div class="filter-field">
+            <label class="field-label">身分</label>
+            <select wire:model.live="roleFilter" class="field-input">
+                <option value="">全部</option>
+                @foreach ($roles as $roleName)
+                    <option value="{{ $roleName }}">{{ \App\Support\RoleLabel::forName($roleName) }}</option>
+                @endforeach
+            </select>
+        </div>
+
+        <div class="filter-field">
+            <label class="field-label">狀態</label>
+            <select wire:model.live="statusFilter" class="field-input">
+                <option value="">全部</option>
+                <option value="active">啟用中</option>
+                <option value="inactive">已停用</option>
+            </select>
+        </div>
+
+        @if ($this->hasActiveFilters())
+            <button type="button" wire:click="clearFilters" class="btn-secondary btn-xs">
+                清除條件
+            </button>
+        @endif
+    </div>
+
+    <div class="table-wrap mt-4">
         <table class="data-table">
             <colgroup>
-                <col style="width: 16%">
+                <col style="width: 12%">
                 <col style="width: 14%">
-                <col style="width: 16%">
+                <col style="width: 10%">
                 <col style="width: 12%">
                 <col style="width: 16%">
-                <col style="width: 26%">
+                <col style="width: 36%">
             </colgroup>
             <thead>
+                @php
+                    $sortColumn = $this->activeSortColumn();
+                    $sortDirection = $this->activeSortDirection();
+                @endphp
                 <tr>
-                    <th>姓名</th>
-                    <th>帳號</th>
-                    <th>身分</th>
-                    <th>狀態</th>
-                    <th>最後登入</th>
+                    <x-sort-header column="name" :active="$sortColumn" :direction="$sortDirection">姓名</x-sort-header>
+                    <x-sort-header column="username" :active="$sortColumn" :direction="$sortDirection">帳號</x-sort-header>
+                    <x-sort-header column="role" :active="$sortColumn" :direction="$sortDirection">身分</x-sort-header>
+                    <x-sort-header column="status" :active="$sortColumn" :direction="$sortDirection">狀態</x-sort-header>
+                    <x-sort-header column="last_login" :active="$sortColumn" :direction="$sortDirection">最後登入</x-sort-header>
                     <th></th>
                 </tr>
             </thead>
             <tbody>
+                @if ($users->isEmpty())
+                    <tr>
+                        <td colspan="6" class="text-center text-slate-500 dark:text-slate-400">
+                            找不到符合條件的帳號。
+                        </td>
+                    </tr>
+                @endif
+
                 @foreach ($users as $user)
                     <tr>
                         @if ($editingUserId === $user->id)

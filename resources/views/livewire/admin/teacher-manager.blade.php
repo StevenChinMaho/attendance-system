@@ -53,7 +53,25 @@
         </form>
     @endif
 
-    <div class="table-wrap mt-6">
+    <div class="filter-bar mt-6">
+        <div class="filter-field grow">
+            <label class="field-label">搜尋姓名或登入帳號</label>
+            <input
+                type="search"
+                wire:model.live.debounce.300ms="search"
+                placeholder="輸入老師姓名或登入帳號…"
+                class="field-input"
+            >
+        </div>
+
+        @if ($this->hasActiveFilters())
+            <button type="button" wire:click="clearFilters" class="btn-secondary btn-xs">
+                清除條件
+            </button>
+        @endif
+    </div>
+
+    <div class="table-wrap mt-4">
         <table class="data-table">
             <colgroup>
                 <col style="width: 35%">
@@ -61,13 +79,24 @@
                 <col style="width: 30%">
             </colgroup>
             <thead>
+                @php
+                    $sortColumn = $this->activeSortColumn();
+                    $sortDirection = $this->activeSortDirection();
+                @endphp
                 <tr>
-                    <th>姓名</th>
-                    <th>登入帳號</th>
+                    <x-sort-header column="name" :active="$sortColumn" :direction="$sortDirection">姓名</x-sort-header>
+                    <x-sort-header column="username" :active="$sortColumn" :direction="$sortDirection">登入帳號</x-sort-header>
                     <th></th>
                 </tr>
             </thead>
             <tbody>
+                @if ($teachers->isEmpty())
+                    <tr>
+                        <td colspan="3" class="text-center text-slate-500 dark:text-slate-400">
+                            找不到符合條件的老師。
+                        </td>
+                    </tr>
+                @endif
                 @foreach ($teachers as $teacher)
                     <tr>
                         @if ($editingTeacherId === $teacher->id)

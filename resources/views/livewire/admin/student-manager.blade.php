@@ -88,16 +88,64 @@
         </form>
     @endif
 
-    <div class="table-wrap mt-6">
+    {{-- 全校學生好幾百人，翻頁找不到人，搜尋／篩選是這一頁的主要導覽方式。 --}}
+    <div class="filter-bar mt-6">
+        <div class="filter-field grow">
+            <label class="field-label">搜尋學號、姓名或登入帳號</label>
+            <input
+                type="search"
+                wire:model.live.debounce.300ms="search"
+                placeholder="輸入學號、姓名或登入帳號…"
+                class="field-input"
+            >
+        </div>
+
+        <div class="filter-field">
+            <label class="field-label">性別</label>
+            <select wire:model.live="genderFilter" class="field-input">
+                <option value="">全部</option>
+                <option value="男">男</option>
+                <option value="女">女</option>
+            </select>
+        </div>
+
+        <div class="filter-field">
+            <label class="field-label">目前班級</label>
+            <select wire:model.live="classFilter" class="field-input">
+                <option value="">全部</option>
+                <option value="none">未加入班級</option>
+                @foreach ($filterableClasses as $schoolClass)
+                    <option value="{{ $schoolClass->id }}">{{ $schoolClass->shortLabel() }}</option>
+                @endforeach
+            </select>
+        </div>
+
+        <div class="filter-field">
+            <label class="field-label">狀態</label>
+            <select wire:model.live="statusFilter" class="field-input">
+                <option value="">全部</option>
+                <option value="enrolled">在讀</option>
+                <option value="left">已轉出</option>
+            </select>
+        </div>
+
+        @if ($this->hasActiveFilters())
+            <button type="button" wire:click="clearFilters" class="btn-secondary btn-xs">
+                清除條件
+            </button>
+        @endif
+    </div>
+
+    <div class="table-wrap mt-4">
         <table class="data-table">
             <colgroup>
                 <col style="width: 13%">
                 <col style="width: 17%">
                 <col style="width: 7%">
-                <col style="width: 15%">
                 <col style="width: 12%">
+                <col style="width: 8%">
                 <col style="width: 14%">
-                <col style="width: 22%">
+                <col style="width: 29%">
             </colgroup>
             <thead>
                 <tr>
@@ -111,6 +159,13 @@
                 </tr>
             </thead>
             <tbody>
+                @if ($students->isEmpty())
+                    <tr>
+                        <td colspan="7" class="text-center text-slate-500 dark:text-slate-400">
+                            找不到符合條件的學生。
+                        </td>
+                    </tr>
+                @endif
                 @foreach ($students as $student)
                     <tr>
                         @if ($editingStudentId === $student->id)

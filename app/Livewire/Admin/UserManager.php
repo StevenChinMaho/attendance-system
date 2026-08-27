@@ -3,7 +3,9 @@
 namespace App\Livewire\Admin;
 
 use App\Livewire\Concerns\RequiresPermission;
+use App\Livewire\Concerns\SortsColumns;
 use App\Models\User;
+use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
@@ -12,9 +14,93 @@ use Spatie\Permission\Models\Role;
 
 class UserManager extends Component
 {
-    use RequiresPermission, WithPagination;
+    use RequiresPermission, SortsColumns, WithPagination;
 
     protected string $requiredPermission = 'users.manage';
+
+    /**
+     * 姓名／帳號的關鍵字搜尋，以及身分／狀態的下拉篩選。全校教職員加上
+     * 需要登入的學生，帳號數量會多到光靠翻頁找不到人。
+     */
+    public string $search = '';
+
+    public string $roleFilter = '';
+
+    public string $statusFilter = '';
+
+    /**
+     * 換了搜尋條件就得回到第一頁——否則使用者可能停在「舊結果的第 5 頁」，
+     * 而新條件只有 2 頁，畫面會變成一片空白，看起來像沒有資料。
+     */
+    public function updatedSearch(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedRoleFilter(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedStatusFilter(): void
+    {
+        $this->resetPage();
+    }
+
+    public function clearFilters(): void
+    {
+        $this->reset(['search', 'roleFilter', 'statusFilter']);
+        $this->resetPage();
+    }
+
+    public function hasActiveFilters(): bool
+    {
+        return $this->search !== '' || $this->roleFilter !== '' || $this->statusFilter !== '';
+    }
+
+    /**
+     * 前五個欄位都可以排序。key 是畫面上用的識別字，值是實際的排序方式
+     * ——絕對不要把 $sortColumn 直接當欄位名用，它是 public 屬性、
+     * 客戶端每次請求都能改寫（見 SortsColumns 的說明）。
+     *
+     * @return array<string, string|\Closure>
+     */
+    protected function sortableColumns(): array
+    {
+        return [
+            'name' => 'name',
+            'username' => 'username',
+            // 身分沒有存在 users 表上（spatie 的樞紐表），用子查詢排序。
+            // 排的是角色的英文識別字而不是畫面上顯示的中文標籤——這一欄
+            // 排序的實際用途是「把同身分的人湊在一起看」，組內順序如何
+            // 不重要，而中文標籤是 PHP 端才映射出來的（RoleLabel），
+            // 資料庫排不到。
+            'role' => fn (Builder $query, string $direction) => $query->orderBy(
+                Role::query()
+                    ->select(config('permission.table_names.roles').'.name')
+                    ->join(
+                        config('permission.table_names.model_has_roles'),
+                        config('permission.table_names.model_has_roles').'.role_id',
+                        '=',
+                        config('permission.table_names.roles').'.id',
+                    )
+                    ->whereColumn(
+                        config('permission.table_names.model_has_roles').'.'.config('permission.column_names.model_morph_key'),
+                        'users.id',
+                    )
+                    ->where(config('permission.table_names.model_has_roles').'.model_type', (new User)->getMorphClass())
+                    ->limit(1),
+                $direction,
+            ),
+            'status' => 'is_active',
+            'last_login' => 'last_login_at',
+        ];
+    }
+
+    protected function defaultSortColumn(): string
+    {
+        return 'name';
+    }
 
     #[Validate('required|string|max:255')]
     public string $name = '';
@@ -255,9 +341,30 @@ class UserManager extends Component
 
     public function render()
     {
+        $roles = Role::orderBy('name')->pluck('name');
+
+        $users = User::with('roles')
+            ->when($this->search !== '', function (Builder $query) {
+                // 括號包起來很重要：不包的話 orWhere 會跟後面的身分／
+                // 狀態篩選變成同一層的 OR，篩選等於整個失效。
+                $term = '%'.$this->search.'%';
+
+                $query->where(fn (Builder $inner) => $inner
+                    ->where('name', 'like', $term)
+                    ->orWhere('username', 'like', $term));
+            })
+            // $roleFilter 是 public 屬性、客戶端可改寫，而 spatie 的
+            // role() scope 收到不存在的角色名會直接丟 RoleDoesNotExist
+            // ——先比對一次實際存在的角色清單再套用。
+            ->when($roles->contains($this->roleFilter), fn (Builder $query) => $query->role($this->roleFilter))
+            ->when(
+                in_array($this->statusFilter, ['active', 'inactive'], true),
+                fn (Builder $query) => $query->where('is_active', $this->statusFilter === 'active'),
+            );
+
         return view('livewire.admin.user-manager', [
-            'users' => User::with('roles')->orderBy('name')->paginate(15),
-            'roles' => Role::orderBy('name')->pluck('name'),
+            'users' => $this->applySort($users)->paginate(15),
+            'roles' => $roles,
         ]);
     }
 }
