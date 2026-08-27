@@ -275,6 +275,38 @@ attendance exec mariadb mariadb -u attendance -p attendance_system
 | `attendance up -d --build` | 安全。重建映像並套用 |
 | `docker system prune -a` | 會刪掉沒在用的映像（含你的回滾目標），volume 不受影響。要用請加 `--volumes` 以外的形式 |
 
+### ⚠ 這個 compose 檔在一台主機上只認一組容器，跟你在哪個目錄執行無關
+
+`compose.production.yaml` 最上面寫死了 `name: attendance-system-production`。
+**Docker Compose 是用這個名稱識別專案的，不是用目錄。** 也就是說，同一台主機上
+不管從哪個目錄、用哪個使用者身分執行這個檔案，操作到的都是**同一組容器與同一個
+資料庫 volume**。
+
+這條規則造成過一次真實的資料損失：開發者在同一台機器上，從自己的專案目錄跑了
+一輪冒煙測試（`up -d --build` 之後 `down -v`），結果操作到的其實是 `/opt` 底下
+那套正在運作的堆疊——資料庫 volume 被 `-v` 直接刪掉，帳號、班級、學生、點名
+紀錄與稽核紀錄全部消失，而且當時還沒有備份。
+
+所以：
+
+- **不要在已經跑著這套系統的主機上，用同一個 compose 檔做任何測試。**
+- 真的需要在同一台機器上試，一定要指定一個丟棄式的專案名稱，讓它跟正式那組
+  完全分開：
+
+  ```bash
+  docker compose -p attendance-smoke-test \
+      --env-file .env.smoke -f compose.production.yaml up -d --build
+  ```
+
+  `-p` 的優先權高於檔案裡的 `name:`，容器與 volume 都會另外開一組，
+  清理時 `docker compose -p attendance-smoke-test down -v` 也只會動到那一組。
+- **`down -v` 請當成「我確定要清空資料庫」的專用指令。** 少了 `-v` 就只是停掉
+  容器、資料完好；加了 `-v` 沒有任何確認、沒有復原機會，Docker 也不留副本。
+
+反過來的方向也要注意：**不要拿掉 `compose.production.yaml` 的 `name:`**。拿掉的話
+compose 會改用目錄名稱當專案名，在開發機上就會跟 Sail 的 `attendance-system`
+撞在一起，正式環境的設定會把 Sail 的 mariadb 容器接管重建（也實測踩過）。
+
 ---
 
 ## 5. 套用更新
@@ -502,13 +534,34 @@ session 寫不進去或 cookie 沒被瀏覽器接受。檢查：
 
 用了 `restart`。要用 `attendance up -d`。見第 4 節的警告。
 
+**容器莫名其妙被重建，或資料庫突然變空的**
+
+`compose.production.yaml` 的專案名稱是寫死的（`name: attendance-system-production`），
+而 compose 用名稱而不是目錄識別專案——所以同一台主機上，**任何目錄**執行這個檔案
+都會操作到同一組容器與 volume。如果有人在這台機器上另外開了一份 checkout 拿來測試，
+他的 `up`／`down` 就是在動你的正式堆疊。完整說明與正確的測試方式見第 4 節的
+「⚠ 這個 compose 檔在一台主機上只認一組容器」。
+
+判斷方法——看容器實際是從哪個目錄啟動的：
+
+```bash
+docker inspect attendance-system-production-app-1 \
+  --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}'
+```
+
+以及資料庫 volume 是什麼時候建立的（如果時間點就是「資料消失」的那一刻，
+代表舊的被刪掉重建了）：
+
+```bash
+docker volume inspect attendance-system-production_db-data --format '{{.CreatedAt}}'
+```
+
 **開發環境的 Sail 容器突然壞掉**
 
-如果你在**開發機**上跑過正式環境的 compose：`compose.production.yaml` 的專案名稱是
-`attendance-system-production`，跟 Sail 的 `attendance-system` 分開，正常不會互相影響。
-但如果拿掉了那個 `name:`，compose 會用目錄名稱當專案名，兩邊就會撞在一起，正式環境
-的設定會把 Sail 的 mariadb 容器直接接管重建。**不要拿掉 `compose.production.yaml`
-最上面的 `name:`。**
+反方向的同一個問題：如果拿掉了 `compose.production.yaml` 最上面的 `name:`，
+compose 會改用目錄名稱當專案名，在開發機上就會跟 Sail 的 `attendance-system`
+撞在一起，正式環境的設定會把 Sail 的 mariadb 容器直接接管重建。
+**不要拿掉那個 `name:`。**
 
 **已經整套用 root 部署好了，想改成一般帳號**
 
@@ -592,6 +645,9 @@ attendance exec app php artisan tinker --execute='App\Models\User::pluck("userna
 
 **目前沒有任何自動備份。** 整個系統唯一有狀態的地方是 `db-data` volume，一旦伺服器
 硬碟損壞或有人誤下 `attendance down -v`，全校的點名紀錄與稽核歷程就沒了。
+
+> 這不是假設性的風險：測試環境已經因為 `down -v` 整個資料庫被清空過一次
+> （見第 4 節的專案名稱說明）。當時沒有備份，資料完全救不回來。
 
 手動備份（升級 MariaDB 或做破壞性 migration 前**務必**先跑）：
 
