@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Account;
 
+use App\Support\AuditLog;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Component;
@@ -50,6 +51,10 @@ class ChangePassword extends Component
             'password' => Hash::make($this->newPassword),
             'must_change_password' => false,
         ])->save();
+
+        // 帳號本人自己改密碼也要留紀錄：如果有人抱怨「我的密碼突然不能
+        // 用了」，這筆紀錄的時間與 IP 就是判斷「是不是本人改的」的依據。
+        AuditLog::auth('自行變更密碼', $user, ['username' => $user->username]);
 
         $this->reset(['currentPassword', 'newPassword', 'newPassword_confirmation']);
 

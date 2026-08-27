@@ -5,6 +5,7 @@ namespace App\Livewire\Admin;
 use App\Livewire\Concerns\RequiresPermission;
 use App\Livewire\Concerns\SortsColumns;
 use App\Models\User;
+use App\Support\AuditLog;
 use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Attributes\Validate;
@@ -155,6 +156,14 @@ class UserManager extends Component
 
         $user->assignRole($this->role);
 
+        // 刻意不記密碼，連雜湊也不記——見 AuditLog 的說明。
+        AuditLog::admin('建立帳號', [
+            'user_id' => $user->id,
+            'username' => $user->username,
+            'name' => $user->name,
+            'role' => $this->role,
+        ], $user);
+
         $this->reset(['name', 'username', 'password', 'role', 'showCreateForm']);
 
         session()->flash('status', "帳號 {$user->username} 建立成功。");
@@ -181,6 +190,11 @@ class UserManager extends Component
         }
 
         $user->update(['is_active' => ! $user->is_active]);
+
+        AuditLog::admin($user->is_active ? '啟用帳號' : '停用帳號', [
+            'user_id' => $user->id,
+            'username' => $user->username,
+        ], $user);
 
         if (! $user->is_active) {
             $user->invalidateSessions();
@@ -239,8 +253,20 @@ class UserManager extends Component
             return;
         }
 
+        $previousRole = $user->roles->first()?->name;
+
         $user->update(['name' => $this->name]);
         $user->syncRoles([$this->role]);
+
+        // 身分變更是權限異動，屬於最需要留下軌跡的一類——「誰把某個
+        // 帳號變成管理者」在這之前完全查不到。
+        AuditLog::admin('更新帳號', [
+            'user_id' => $user->id,
+            'username' => $user->username,
+            'name' => $user->name,
+            'role_from' => $previousRole,
+            'role_to' => $this->role,
+        ], $user);
 
         $this->cancelEdit();
 
@@ -290,6 +316,11 @@ class UserManager extends Component
         // toggleActive() 停用帳號時的處理一致。
         $user->invalidateSessions();
 
+        AuditLog::admin('重設帳號密碼', [
+            'user_id' => $user->id,
+            'username' => $user->username,
+        ], $user);
+
         $this->cancelResetPassword();
 
         session()->flash('status', "帳號 {$user->username} 的密碼已重設，該帳號下次登入需要另外設定新密碼。");
@@ -326,6 +357,16 @@ class UserManager extends Component
         }
 
         $user->invalidateSessions();
+
+        // 先記再刪：刪掉之後 performedOn 會指向一列不存在的資料，
+        // 而 properties 裡的快照才是事後唯一查得到的線索。
+        AuditLog::admin('刪除帳號', [
+            'user_id' => $user->id,
+            'username' => $user->username,
+            'name' => $user->name,
+            'role' => $user->roles->first()?->name,
+        ]);
+
         $user->delete();
 
         session()->flash('status', "帳號 {$user->username} 已刪除。");

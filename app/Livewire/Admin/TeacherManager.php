@@ -7,6 +7,7 @@ use App\Livewire\Concerns\SortsColumns;
 use App\Models\Teacher;
 use App\Models\User;
 use App\Rules\UserAccountIsUnlinked;
+use App\Support\AuditLog;
 use Illuminate\Contracts\Database\Query\Builder;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -113,6 +114,12 @@ class TeacherManager extends Component
             'user_id' => $this->userId,
         ]);
 
+        AuditLog::admin('建立老師', [
+            'teacher_id' => $teacher->id,
+            'teacher_name' => $teacher->teacher_name,
+            'linked_user_id' => $teacher->user_id,
+        ], $teacher);
+
         $this->reset(['teacherName', 'userId', 'showCreateForm']);
 
         session()->flash('status', "老師「{$teacher->teacher_name}」建立成功。");
@@ -139,6 +146,12 @@ class TeacherManager extends Component
             'user_id' => $this->userId,
         ]);
 
+        AuditLog::admin('更新老師', [
+            'teacher_id' => $teacher->id,
+            'teacher_name' => $teacher->teacher_name,
+            'linked_user_id' => $teacher->user_id,
+        ], $teacher);
+
         $this->cancelEdit();
 
         session()->flash('status', "老師「{$teacher->teacher_name}」已更新。");
@@ -162,6 +175,12 @@ class TeacherManager extends Component
 
             return;
         }
+
+        AuditLog::admin('刪除老師', [
+            'teacher_id' => $teacher->id,
+            'teacher_name' => $teacher->displayName(),
+            'linked_user_id' => $teacher->user_id,
+        ]);
 
         $teacher->delete();
 

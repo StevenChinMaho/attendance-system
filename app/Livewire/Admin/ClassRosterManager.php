@@ -5,6 +5,7 @@ namespace App\Livewire\Admin;
 use App\Livewire\Concerns\RequiresPermission;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Support\AuditLog;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
 
@@ -98,6 +99,15 @@ class ClassRosterManager extends Component
 
         $this->schoolClass->students()->attach($student->id, ['seat_number' => $this->seatNumber]);
 
+        AuditLog::admin('學生加入班級', [
+            'school_class_id' => $this->schoolClass->id,
+            'school_class' => $this->schoolClass->shortLabel(),
+            'student_id' => $student->id,
+            'student_number' => $student->student_number,
+            'student_name' => $student->displayName(),
+            'seat_number' => $this->seatNumber,
+        ], $student);
+
         $this->reset(['attachingStudentId', 'seatNumber', 'showAttachForm']);
 
         session()->flash('status', "學生「{$student->displayName()}」已加入「{$this->schoolClass->shortLabel()}」。");
@@ -125,6 +135,13 @@ class ClassRosterManager extends Component
             'seat_number' => $this->seatNumber,
         ]);
 
+        AuditLog::admin('變更座號', [
+            'school_class_id' => $this->schoolClass->id,
+            'school_class' => $this->schoolClass->shortLabel(),
+            'student_id' => $this->editingSeatForStudentId,
+            'seat_number' => $this->seatNumber,
+        ]);
+
         $this->cancelEditSeat();
 
         session()->flash('status', '座號已更新。');
@@ -145,6 +162,15 @@ class ClassRosterManager extends Component
     public function removeStudent(Student $student): void
     {
         $student = $this->schoolClass->students()->findOrFail($student->id);
+
+        AuditLog::admin('學生移出班級', [
+            'school_class_id' => $this->schoolClass->id,
+            'school_class' => $this->schoolClass->shortLabel(),
+            'student_id' => $student->id,
+            'student_number' => $student->student_number,
+            'student_name' => $student->displayName(),
+            'seat_number' => $student->pivot->seat_number,
+        ], $student);
 
         $this->schoolClass->students()->detach($student->id);
 

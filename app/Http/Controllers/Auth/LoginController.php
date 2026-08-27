@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\AuditLog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -65,6 +66,13 @@ class LoginController extends Controller
         if (RateLimiter::tooManyAttempts($throttleKey, self::MAX_LOGIN_ATTEMPTS)) {
             $seconds = RateLimiter::availableIn($throttleKey);
 
+            // 被限制擋下來這件事本身就是訊號：正常使用者不會連錯五次，
+            // 短時間內大量出現代表有人在猜某個帳號的密碼。
+            AuditLog::auth('登入被頻率限制擋下', $this->accountFor($credentials['username']), [
+                'username' => $this->loggableUsername($credentials['username']),
+                'retry_after_seconds' => $seconds,
+            ]);
+
             throw ValidationException::withMessages([
                 'username' => "登入嘗試次數過多，請 {$seconds} 秒後再試一次。",
             ]);
@@ -84,6 +92,10 @@ class LoginController extends Controller
         if ($user && ! $user->is_active) {
             RateLimiter::hit($throttleKey, self::LOGIN_DECAY_SECONDS);
 
+            AuditLog::auth('登入失敗：帳號已停用', $user, [
+                'username' => $user->username,
+            ]);
+
             throw ValidationException::withMessages([
                 'username' => '此帳號已被停用，請聯絡管理者。',
             ]);
@@ -91,6 +103,12 @@ class LoginController extends Controller
 
         if (! Auth::attempt($credentials, $request->boolean('remember'))) {
             RateLimiter::hit($throttleKey, self::LOGIN_DECAY_SECONDS);
+
+            AuditLog::auth(
+                $user ? '登入失敗：密碼錯誤' : '登入失敗：帳號不存在',
+                $user,
+                ['username' => $this->loggableUsername($credentials['username'])],
+            );
 
             throw ValidationException::withMessages([
                 'username' => '帳號或密碼錯誤。',
@@ -103,7 +121,34 @@ class LoginController extends Controller
 
         Auth::user()->forceFill(['last_login_at' => now()])->save();
 
+        // users.last_login_at 只留「最後一次」，看不出歷程。稽核紀錄
+        // 才答得出「這個帳號這學期在什麼時間、從哪些位置登入過」——
+        // 那正是判斷帳號是不是被別人拿去用的主要線索。
+        AuditLog::auth('登入成功', Auth::user(), [
+            'username' => Auth::user()->username,
+            'remember' => $request->boolean('remember'),
+        ]);
+
         return redirect()->intended(route('dashboard'));
+    }
+
+    /**
+     * 只有在這個帳號真的存在時才把輸入的字串記進稽核紀錄。
+     *
+     * 理由不是隱私而是安全：使用者把密碼打進帳號欄是很常見的手誤，
+     * 而那個字串幾乎不可能剛好等於某個既有帳號名稱——所以「存在才記」
+     * 這個規則，剛好可以擋掉「有人的密碼以明文躺在管理者看得到的稽核
+     * 紀錄裡」這種意外。帳號不存在時仍然會留下 IP 與時間，「有人在亂試
+     * 帳號」這件事還是看得出來。
+     */
+    private function loggableUsername(string $username): ?string
+    {
+        return User::where('username', $username)->exists() ? $username : null;
+    }
+
+    private function accountFor(string $username): ?User
+    {
+        return User::where('username', $username)->first();
     }
 
     private function throttleKey(Request $request): string
@@ -116,6 +161,11 @@ class LoginController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        // 一定要在 logout() 之前記，之後 Auth::user() 就是 null 了。
+        if (Auth::check()) {
+            AuditLog::auth('登出', Auth::user(), ['username' => Auth::user()->username]);
+        }
+
         Auth::logout();
 
         $request->session()->invalidate();

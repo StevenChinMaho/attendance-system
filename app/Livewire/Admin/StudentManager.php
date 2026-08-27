@@ -8,6 +8,7 @@ use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\User;
 use App\Rules\UserAccountIsUnlinked;
+use App\Support\AuditLog;
 use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\On;
@@ -186,6 +187,14 @@ class StudentManager extends Component
             'user_id' => $this->userId,
         ]);
 
+        AuditLog::admin('建立學生', [
+            'student_id' => $student->id,
+            'student_number' => $student->student_number,
+            'student_name' => $student->name,
+            'gender' => $student->gender,
+            'linked_user_id' => $student->user_id,
+        ], $student);
+
         $this->reset(['studentNumber', 'name', 'gender', 'userId', 'showCreateForm']);
 
         session()->flash('status', "學生「{$student->name}」建立成功，接下來到「班級管理」把他加進班級。");
@@ -217,6 +226,14 @@ class StudentManager extends Component
             'gender' => $this->gender,
             'user_id' => $this->userId,
         ]);
+
+        AuditLog::admin('更新學生', [
+            'student_id' => $student->id,
+            'student_number' => $student->student_number,
+            'student_name' => $student->name,
+            'gender' => $student->gender,
+            'linked_user_id' => $student->user_id,
+        ], $student);
 
         $this->cancelEdit();
 
@@ -262,6 +279,13 @@ class StudentManager extends Component
         } else {
             $student->departures()->create(['left_at' => $this->leftDate]);
         }
+
+        AuditLog::admin('標記學生轉出', [
+            'student_id' => $student->id,
+            'student_number' => $student->student_number,
+            'student_name' => $student->displayName(),
+            'left_at' => $this->leftDate,
+        ], $student);
 
         $this->cancelMarkAsLeft();
 
@@ -311,6 +335,14 @@ class StudentManager extends Component
 
         $openDeparture->update(['returned_at' => $this->returnedDate]);
 
+        AuditLog::admin('學生恢復在讀', [
+            'student_id' => $student->id,
+            'student_number' => $student->student_number,
+            'student_name' => $student->displayName(),
+            'left_at' => $openDeparture->left_at->toDateString(),
+            'returned_at' => $this->returnedDate,
+        ], $student);
+
         $this->cancelRestore();
 
         session()->flash('status', "學生「{$student->displayName()}」已標記為 {$this->returnedDate} 恢復在讀。");
@@ -333,6 +365,12 @@ class StudentManager extends Component
 
             return;
         }
+
+        AuditLog::admin('刪除學生', [
+            'student_id' => $student->id,
+            'student_number' => $student->student_number,
+            'student_name' => $student->displayName(),
+        ]);
 
         $student->delete();
 

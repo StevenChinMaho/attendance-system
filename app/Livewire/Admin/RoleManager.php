@@ -3,6 +3,7 @@
 namespace App\Livewire\Admin;
 
 use App\Livewire\Concerns\RequiresPermission;
+use App\Support\AuditLog;
 use Livewire\Component;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -80,6 +81,12 @@ class RoleManager extends Component
         $role = Role::create(['name' => $this->name, 'guard_name' => 'web']);
         $role->syncPermissions($this->selectedPermissions);
 
+        AuditLog::admin('建立身分', [
+            'role_id' => $role->id,
+            'role' => $role->name,
+            'permissions' => array_values($this->selectedPermissions),
+        ], $role);
+
         $this->reset(['name', 'selectedPermissions', 'showCreateForm']);
 
         session()->flash('status', "身分「{$role->name}」建立成功。");
@@ -101,9 +108,18 @@ class RoleManager extends Component
 
         if ($role->hasPermissionTo($permission)) {
             $role->revokePermissionTo($permission);
+            $granted = false;
         } else {
             $role->givePermissionTo($permission);
+            $granted = true;
         }
+
+        // 權限異動是稽核價值最高的一類：它決定了誰能進哪個後台頁面。
+        AuditLog::admin($granted ? '身分新增權限' : '身分移除權限', [
+            'role_id' => $role->id,
+            'role' => $role->name,
+            'permission' => $permission,
+        ], $role);
     }
 
     public function deleteRole(int $roleId): void
@@ -119,6 +135,13 @@ class RoleManager extends Component
 
             return;
         }
+
+        // 先記再刪，理由同 UserManager::deleteUser()。
+        AuditLog::admin('刪除身分', [
+            'role_id' => $role->id,
+            'role' => $role->name,
+            'permissions' => $role->permissions->pluck('name')->all(),
+        ]);
 
         $role->delete();
 

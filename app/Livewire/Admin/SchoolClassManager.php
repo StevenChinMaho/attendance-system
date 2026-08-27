@@ -8,6 +8,7 @@ use App\Models\SchoolClass;
 use App\Models\Teacher;
 use App\Models\User;
 use App\Rules\UserAccountIsUnlinked;
+use App\Support\AuditLog;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\On;
 use Livewire\Component;
@@ -75,6 +76,13 @@ class SchoolClassManager extends Component
             'teacher_name' => Teacher::resolveName($this->newTeacherUserId, $this->newTeacherName),
             'user_id' => $this->newTeacherUserId,
         ]);
+
+        AuditLog::admin('建立老師', [
+            'teacher_id' => $teacher->id,
+            'teacher_name' => $teacher->teacher_name,
+            'linked_user_id' => $teacher->user_id,
+            'via' => '班級管理的快速新增',
+        ], $teacher);
 
         $this->homeroomTeacherId = $teacher->id;
         $this->showQuickAddTeacher = false;
@@ -163,6 +171,12 @@ class SchoolClassManager extends Component
             'homeroom_teacher_id' => $this->homeroomTeacherId,
         ]);
 
+        AuditLog::admin('建立班級', [
+            'school_class_id' => $class->id,
+            'school_class' => $class->label(),
+            'homeroom_teacher_id' => $class->homeroom_teacher_id,
+        ], $class);
+
         $this->reset(['grade', 'classNumber', 'homeroomTeacherId', 'showCreateForm']);
 
         session()->flash('status', "班級「{$class->shortLabel()}」建立成功。");
@@ -195,6 +209,12 @@ class SchoolClassManager extends Component
             'homeroom_teacher_id' => $this->homeroomTeacherId,
         ]);
 
+        AuditLog::admin('更新班級', [
+            'school_class_id' => $class->id,
+            'school_class' => $class->label(),
+            'homeroom_teacher_id' => $class->homeroom_teacher_id,
+        ], $class);
+
         $this->cancelEdit();
 
         session()->flash('status', "班級「{$class->shortLabel()}」已更新。");
@@ -221,6 +241,11 @@ class SchoolClassManager extends Component
 
             return;
         }
+
+        AuditLog::admin('刪除班級', [
+            'school_class_id' => $schoolClass->id,
+            'school_class' => $schoolClass->label(),
+        ]);
 
         $schoolClass->delete();
 

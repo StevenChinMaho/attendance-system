@@ -8,6 +8,7 @@ use App\Models\AttendanceRecord;
 use App\Models\AttendanceSession;
 use App\Models\SchoolClass;
 use App\Support\AttendanceWindow;
+use App\Support\AuditLog;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Support\Facades\DB;
@@ -124,6 +125,11 @@ class Recorder extends Component
                 ['recorded_by' => auth()->id()],
             );
 
+            // wasRecentlyCreated 要在這裡先取下來：底下還會對同一個
+            // $session 做其他操作，等到最後才讀有可能已經不是這一次
+            // firstOrCreate 的結果。
+            $isNewSession = $session->wasRecentlyCreated;
+
             // 稽核用：寫入前先查出目前的狀態，upsert 完再跟新值比對。不能
             // 靠 AttendanceRecord 的 LogsActivity 模型事件自動記錄，因為
             // upsert() 是批次寫入，不會觸發 Eloquent 的 saving/saved 事件。
@@ -158,6 +164,7 @@ class Recorder extends Component
                 ['status', 'updated_by', 'updated_at'],
             );
 
+            $this->logSubmission($session, $rows, $isNewSession);
             $this->logStatusChanges($session, $previousStatuses);
 
             $this->currentSessionId = $session->id;
@@ -167,9 +174,57 @@ class Recorder extends Component
     }
 
     /**
+     * 整份點名單被送出這件事本身要留一筆，跟底下逐一學生的狀態變更是
+     * 兩個不同層級的紀錄。
+     *
+     * 為什麼需要：logStatusChanges() 刻意不記「第一次點名 + 出席」這種
+     * 例行狀態，結果是**一份「全班到齊」的點名單送出後，稽核紀錄裡一筆
+     * 都沒有**——而那正好是最需要被記下來的情境之一（有人冒用帳號送出
+     * 一份全到，事後完全查不到是誰、什麼時候送的）。attendance_sessions
+     * 那一列雖然帶著 recorded_by，但它只記「第一個點名的人」，之後重新
+     * 送出不會更新，也不在稽核紀錄裡。
+     *
+     * properties 帶的是人看得懂的快照（班級名稱、日期、時段中文名、
+     * 各狀態人數），不是只有 id——這樣事後查閱不必 join 四張表，班級
+     * 之後被改名或刪除也不影響已經寫下的紀錄，見 AuditLog 的說明。
+     *
+     * @param  array<int, array<string, mixed>>  $rows  這次 upsert 的完整寫入內容
+     */
+    protected function logSubmission(AttendanceSession $session, array $rows, bool $isNewSession): void
+    {
+        $counts = [];
+
+        foreach (AttendanceStatus::cases() as $status) {
+            $counts[$status->value] = 0;
+        }
+
+        foreach ($rows as $row) {
+            $counts[$row['status']]++;
+        }
+
+        AuditLog::attendanceSession(
+            $isNewSession ? '點名單送出' : '點名單重新送出',
+            [
+                'school_class_id' => $this->schoolClass->id,
+                'school_class' => $this->schoolClass->shortLabel(),
+                'attendance_session_id' => $session->id,
+                'date' => $this->date,
+                'period' => $this->period,
+                'period_label' => AttendancePeriods::PERIODS[$this->period] ?? $this->period,
+                'student_count' => count($rows),
+                'status_counts' => $counts,
+            ],
+            $session,
+        );
+    }
+
+    /**
      * 只記錄「有意義」的變動：真的變了才記，全班第一次點名預設的
      * 「出席」不記（那是例行狀態，不是需要留意的例外），但只要是
      * 非出席狀態被記下、或任何狀態被改動，都留一筆稽核紀錄。
+     *
+     * 「送出這件事」本身另外由 logSubmission() 記一筆，所以即使這裡一筆
+     * 都沒寫（全班到齊），稽核紀錄裡仍然看得到有人送出過點名單。
      */
     protected function logStatusChanges(AttendanceSession $session, SupportCollection $previousStatuses): void
     {
@@ -185,16 +240,26 @@ class Recorder extends Component
                 continue;
             }
 
-            activity('attendance_record')
-                ->causedBy(auth()->user())
-                ->withProperties([
+            AuditLog::attendanceRecord(
+                $oldStatus === null ? '出席狀態建立' : '出席狀態變更',
+                [
                     'school_class_id' => $this->schoolClass->id,
+                    'school_class' => $this->schoolClass->shortLabel(),
                     'attendance_session_id' => $session->id,
+                    // 日期與時段本來只能靠 attendance_session_id 回頭 join
+                    // 才知道，查詢畫面每一列都要多一次關聯；直接存下來，
+                    // 紀錄就是自足的（理由見 AuditLog 的說明）。
+                    'date' => $this->date,
+                    'period' => $this->period,
+                    'period_label' => AttendancePeriods::PERIODS[$this->period] ?? $this->period,
                     'student_id' => $student->id,
+                    'student_number' => $student->student_number,
+                    'student_name' => $student->displayName(),
                     'old' => $oldStatus?->value,
                     'new' => $newStatus->value,
-                ])
-                ->log($oldStatus === null ? '出席狀態建立' : '出席狀態變更');
+                ],
+                $session,
+            );
         }
     }
 

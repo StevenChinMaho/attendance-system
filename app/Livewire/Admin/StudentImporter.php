@@ -6,6 +6,7 @@ use App\Livewire\Concerns\RequiresPermission;
 use App\Livewire\Concerns\ScopesToSelectedAcademicPeriod;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Support\AuditLog;
 use App\Support\ClassCode;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -323,6 +324,19 @@ class StudentImporter extends Component
                 $row['class']->students()->attach($student->id, ['seat_number' => $row['seat_number']]);
             }
         });
+
+        // 匯入是一次影響全校資料的操作，逐列記錄只會把稽核紀錄淹掉，
+        // 所以記一筆總結：檔名、各類別的筆數、涉及哪些班級。要追個別
+        // 學生的話，班級名冊的加入紀錄本來就查得到。
+        AuditLog::admin('批量匯入學生', [
+            'file_name' => $this->file?->getClientOriginalName(),
+            'created' => $created,
+            'attached' => $attached,
+            'skipped' => $rows->where('outcome', 'skip')->count(),
+            'total_rows' => $rows->count(),
+            'classes' => $rows->pluck('class')->filter()->unique('id')
+                ->map(fn ($class) => $class->shortLabel())->values()->all(),
+        ]);
 
         $this->clearFile();
 
