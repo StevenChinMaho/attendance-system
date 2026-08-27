@@ -636,6 +636,28 @@ session 寫不進去或 cookie 沒被瀏覽器接受。檢查：
 
 用了 `restart`。要用 `attendance up -d`。見第 4 節的警告。
 
+**`attendance logs app` 裡的 IP 永遠是同一個容器位址**
+
+php-fpm 的存取記錄預設用 `%R`，而 **`%R` 記的是「連進 php-fpm 的那一端」**，也就是
+nginx 容器的位址——它永遠不變，跟真正的訪客無關。這不代表 IP 解析壞掉：同一個請求
+在 nginx 的存取記錄與稽核紀錄裡都是正確的真實 IP。
+
+`docker/production/php-fpm.conf` 已經把格式改成 `%{REMOTE_ADDR}e`（讀 FastCGI 參數，
+也就是 nginx 經 `real_ip` 還原後的真實 IP），並加上耗時與尖峰記憶體。要套用需要
+**重建 app 映像**（這個檔案是烤進映像的，不是 bind mount）：
+
+```bash
+attendance up -d --build
+```
+
+三個地方各自的定位：
+
+| 位置 | 內容 |
+|---|---|
+| `attendance logs web` | nginx 存取記錄，含真實 IP、狀態碼、回應大小 |
+| `attendance logs app` | php-fpm，含真實 IP、**耗時與記憶體**（nginx 給不了的） |
+| `/admin/audit` | 應用層行為（登入、點名、後台操作），含真實 IP 與操作者 |
+
 **`restart` 某個容器時報 `failed to create shim task ... no such file or directory`**
 
 發生在「bind mount 掛進容器的檔案被 `git pull` 換掉之後」。git 不是就地修改檔案，
