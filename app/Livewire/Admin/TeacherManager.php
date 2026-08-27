@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Rules\UserAccountIsUnlinked;
 use App\Support\AuditLog;
 use Illuminate\Contracts\Database\Query\Builder;
+use Illuminate\Support\Collection;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -19,6 +20,15 @@ class TeacherManager extends Component
     protected string $requiredPermission = 'teachers.manage';
 
     public string $search = '';
+
+    /**
+     * 「連結登入帳號」下拉選單的過濾字串。理由同 StudentManager：帳號
+     * 會持續累積，一次列出全部到後來根本挑不到人。
+     */
+    public string $accountSearch = '';
+
+    /** 帳號選單一次最多列出幾筆，超過請用搜尋縮小範圍。 */
+    private const ACCOUNT_PICKER_LIMIT = 50;
 
     public function updatedSearch(): void
     {
@@ -209,9 +219,39 @@ class TeacherManager extends Component
 
         return view('livewire.admin.teacher-manager', [
             'teachers' => $this->applySort($teachers)->paginate(15),
-            'availableUsers' => User::availableForLinking(exceptTeacherId: $this->editingTeacherId)
-                ->orderBy('name')
-                ->get(),
+            'availableUsers' => $this->accountsForPicker(),
         ]);
+    }
+
+    /**
+     * 目前已選中的帳號一定要留在清單裡——不然使用者一開始過濾，正在
+     * 編輯的那筆連結就會從 select 掉出去，看起來像被清空了，一送出就
+     * 真的被清掉。
+     *
+     * @return Collection<int, User>
+     */
+    protected function accountsForPicker(): Collection
+    {
+        $accounts = User::availableForLinking(exceptTeacherId: $this->editingTeacherId)
+            ->when($this->accountSearch !== '', function ($query) {
+                $term = '%'.$this->accountSearch.'%';
+
+                $query->where(fn ($inner) => $inner
+                    ->where('name', 'like', $term)
+                    ->orWhere('username', 'like', $term));
+            })
+            ->orderBy('name')
+            ->limit(self::ACCOUNT_PICKER_LIMIT)
+            ->get();
+
+        if ($this->userId !== null && ! $accounts->contains('id', $this->userId)) {
+            $selected = User::find($this->userId);
+
+            if ($selected) {
+                $accounts->prepend($selected);
+            }
+        }
+
+        return $accounts;
     }
 }

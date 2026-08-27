@@ -71,12 +71,24 @@
 
             <div class="col-span-2">
                 <label class="field-label">連結登入帳號（選填，需要自己登入系統的學生才需要）</label>
+                {{-- 帳號會越積越多，一次列出全部到後來根本挑不到人，
+                     所以上面多一個過濾用的輸入框。 --}}
+                <input
+                    type="search"
+                    wire:model.live.debounce.300ms="accountSearch"
+                    placeholder="輸入姓名或帳號過濾…"
+                    class="field-input"
+                >
                 <select wire:model.live="userId" class="field-input">
                     <option value="">不連結帳號</option>
                     @foreach ($availableUsers as $user)
                         <option value="{{ $user->id }}">{{ $user->name }}（{{ $user->username }}）</option>
                     @endforeach
                 </select>
+                <p class="field-hint">
+                    最多列出 50 筆，找不到請用上面的欄位過濾。
+                    也可以直接在下方學生列表按「建立帳號」，系統會自動建好並連結。
+                </p>
             </div>
 
             <div class="col-span-2">
@@ -183,6 +195,12 @@
                                         <option value="男">男</option>
                                         <option value="女">女</option>
                                     </select>
+                                    <input
+                                        type="search"
+                                        wire:model.live.debounce.300ms="accountSearch"
+                                        placeholder="過濾帳號…"
+                                        class="field-input mt-0 w-32 py-1"
+                                    >
                                     <select wire:model.live="userId" class="field-input mt-0 py-1">
                                         <option value="">不連結帳號</option>
                                         @foreach ($availableUsers as $user)
@@ -204,6 +222,24 @@
                                 </form>
                                 <p class="field-hint">預設是今天，如果實際轉出是過去某一天，改成那一天即可——這會影響他在那之後的日子是否還會出現在點名名冊裡。</p>
                                 @error('leftDate') <p class="field-error">{{ $message }}</p> @enderror
+                            </td>
+                        @elseif ($creatingAccountStudentId === $student->id)
+                            <td colspan="7">
+                                <form wire:submit="createAccountForStudent" class="flex flex-wrap items-center gap-2">
+                                    <span class="text-sm text-slate-600 dark:text-slate-300">
+                                        為「{{ $student->displayName() }}」建立帳號：
+                                    </span>
+                                    <input type="text" wire:model="newAccountUsername" placeholder="帳號名稱" class="field-input mt-0 w-32 py-1">
+                                    <input type="text" wire:model="newAccountPassword" placeholder="初始密碼（至少 8 字元）" class="field-input mt-0 w-56 py-1">
+                                    <button type="submit" class="btn-primary btn-xs">建立並連結</button>
+                                    <button type="button" wire:click="cancelCreateAccount" class="btn-secondary btn-xs">取消</button>
+                                </form>
+                                <p class="field-hint">
+                                    姓名會自動沿用這位學生的姓名，身分固定是「學生」。
+                                    密碼請另外告知本人；該帳號首次登入會被要求自行設定新密碼。
+                                </p>
+                                @error('newAccountUsername') <p class="field-error">{{ $message }}</p> @enderror
+                                @error('newAccountPassword') <p class="field-error">{{ $message }}</p> @enderror
                             </td>
                         @elseif ($restoringStudentId === $student->id)
                             <td colspan="7">
@@ -236,12 +272,37 @@
                                     <span class="badge-success">在讀</span>
                                 @endif
                             </td>
-                            <td>{{ $student->user?->username ?? '—' }}</td>
+                            <td>
+                                @if ($student->user)
+                                    {{ $student->user->username }}
+                                @else
+                                    {{-- 同名建議：只在「恰好一個同名的未連結帳號」時出現，
+                                         多個同名候選時不猜（見 accountSuggestions()）。 --}}
+                                    @php $suggested = $accountSuggestions->get($student->displayName()); @endphp
+                                    @if ($suggested)
+                                        <button
+                                            type="button"
+                                            wire:click="linkSuggestedAccount({{ $student->id }}, {{ $suggested->id }})"
+                                            class="btn-secondary btn-xs"
+                                            title="有一個姓名完全相同的帳號還沒被連結"
+                                        >
+                                            連結 {{ $suggested->username }}
+                                        </button>
+                                    @else
+                                        <span class="text-slate-400 dark:text-slate-500">—</span>
+                                    @endif
+                                @endif
+                            </td>
                             <td>
                                 <div class="action-group">
                                     <button type="button" wire:click="startEdit({{ $student->id }})" class="btn-secondary btn-xs">
                                         編輯
                                     </button>
+                                    @unless ($student->user)
+                                        <button type="button" wire:click="startCreateAccount({{ $student->id }})" class="btn-secondary btn-xs">
+                                            建立帳號
+                                        </button>
+                                    @endunless
                                     @if ($student->currentDeparture)
                                         <button type="button" wire:click="startRestore({{ $student->id }})" class="btn-secondary btn-xs">
                                             恢復在讀
