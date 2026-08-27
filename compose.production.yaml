@@ -136,6 +136,10 @@ services:
         # 讓備份檔在主機上的擁有者是部署帳號，才方便複製到異地。
         user: '${BACKUP_UID:-1000}:${BACKUP_GID:-1000}'
         environment:
+            # 沒有這一行的話容器是 UTC，BACKUP_HOUR=3 會在台灣時間 11:00
+            # 執行——正好是上課時間，跟「凌晨備份避開尖峰」的用意完全相反。
+            # 設定時區之後 BACKUP_HOUR 就是當地時間，不必自己換算。
+            TZ: '${TZ:-Asia/Taipei}'
             DB_HOST: mariadb
             DB_DATABASE: '${DB_DATABASE:?}'
             DB_USERNAME: '${DB_USERNAME:?}'

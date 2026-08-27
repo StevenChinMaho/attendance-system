@@ -776,17 +776,78 @@ $DRILL down -v && rm -rf /tmp/restore-drill /tmp/.env.drill
 心跳證明的是「備份程序有跑完」，不證明「檔案現在還在」（例如有人把目錄清掉）。
 後者由 `backup.sh verify` 檢查實體檔案，兩者互補，做還原演練時順手跑一次。
 
-### 待辦：異地備份
+### 異地備份（複製到第二顆實體硬碟）
 
-**目前備份跟資料庫在同一顆硬碟上，只防誤刪，不防硬體故障。** 要真正安全，備份必須
-複製到另一台機器。方向：在主機上加一條 cron 做 `rsync` 到校內另一台機器或 NAS。
+備份跟資料庫在同一顆硬碟上時，只防誤刪、不防硬體故障。`mirror-backups.sh` 把備份
+複製到另一顆實體硬碟。
 
-如果要傳到校外的儲存空間，請先加密——dump 檔裡有全校學生姓名、學號、性別與密碼
-雜湊。`age` 或 `gpg` 都可以，代價是多一組金鑰要保管（而且那組金鑰弄丟，備份就真的
-救不回來了，跟前面說的「不依賴密碼」不同）。
+在 `.env.production` 設定目標：
 
-跑在 WSL 上時要特別注意：`/opt` 在 WSL 的虛擬磁碟裡，WSL 一旦被重設，備份跟資料庫
-會一起消失，等於完全沒有隔離。
+```bash
+BACKUP_MIRROR_PATH=/mnt/wsl/PHYSICALDRIVE2p2/attendance-backups
+```
+
+首次設定與安裝排程：
+
+```bash
+./docker/production/mirror-backups.sh init      # 建目錄與標記檔（會用到 sudo）
+./docker/production/mirror-backups.sh install   # 安裝每日 03:30 的 cron
+./docker/production/mirror-backups.sh status    # 確認
+```
+
+日常查看：
+
+```bash
+./docker/production/mirror-backups.sh status
+attendance exec backup backup.sh verify         # 會一併回報鏡像的同步時間
+```
+
+**這一支刻意跑在主機上，不是容器。** 目標若是 WSL 掛載的實體硬碟，掛載狀態隨時
+可能變（WSL 重啟後要重新 `wsl --mount`），而 docker 的 bind mount 是在容器啟動時
+解析的——主機重新掛載之後，容器裡看到的仍然是舊的那一份，會安靜地寫到錯誤的地方。
+主機端的腳本每次都看得到真實狀態。
+
+#### ⚠ WSL 掛載的陷阱，以及腳本為什麼要三重確認
+
+`wsl --mount` 掛上的硬碟出現在 `/mnt/wsl` 底下，而 **`/mnt/wsl` 本身是 tmpfs，
+也就是記憶體**。硬碟沒掛上的時候，那個路徑要嘛不存在，要嘛只是 tmpfs 上一個普通的
+空目錄——`rsync` 會很開心地把備份寫進記憶體裡：看起來一切正常、佔用 RAM、然後在
+下次重啟時全部消失。
+
+所以「目錄存在」完全不足以當判斷依據。同步前會確認三件事，任何一項不過就拒絕執行：
+
+1. 目標所在的掛載點真的是一個 mount point
+2. 它的檔案系統不是 `tmpfs`／`ramfs`
+3. 目標目錄裡有 `.attendance-mirror-target` 這個標記檔（`init` 建立的）——證明是
+   「那一顆」碟，而不是剛好掛了別的東西上去
+
+外加確認來源與目標在不同的裝置上，否則鏡像沒有意義。
+
+硬碟沒掛上時，在 Windows 端重新掛載：
+
+```
+wsl --mount \\.\PHYSICALDRIVE2 --partition 2
+```
+
+#### 為什麼不用 `rsync --delete`
+
+鏡像的目的是備援，不是做出一份一模一樣的副本。加了 `--delete` 的話，來源端不管是
+正常輪替、還是有人誤刪整個目錄，都會原封不動地同步過去——那正好把備份最該防的情境
+變成必然發生。
+
+代價是鏡像端會累積：以每天約 15MB 估算，一年不到 6GB。真的需要清理時用
+`mirror-backups.sh prune <天數>`，那是一個明確的決定，不是自動行為。
+
+#### cron 在 WSL 上不會自動啟動
+
+`install` 會提醒，但值得再說一次：
+
+```bash
+service cron status || sudo service cron start
+```
+
+WSL 每次重啟都要重新啟動 cron 服務（或設定成自動啟動）。這一點跟「硬碟要重新掛載」
+一樣，是 WSL 環境特有的、搬到真正的 Ubuntu server 之後就不存在的問題。
 
 ### 其他
 

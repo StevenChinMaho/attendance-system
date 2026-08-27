@@ -187,6 +187,19 @@ verify() {
         return 1
     fi
 
+    # 異地鏡像的狀態。標記檔由主機端的 mirror-backups.sh 寫在備份目錄裡
+    # ——這個容器看得到那個目錄，所以「檢查備份」可以一次看完兩邊。
+    # 沒有設定鏡像的話不提，避免對還沒做這件事的環境變成雜訊。
+    if [ -f "$BACKUP_DIR/.last-mirror" ]; then
+        mirror_age=$(( ( $(date '+%s') - $(date -r "$BACKUP_DIR/.last-mirror" '+%s') ) / 3600 ))
+        echo "異地鏡像：最後同步於 $(cat "$BACKUP_DIR/.last-mirror")（${mirror_age} 小時前）"
+
+        if [ "$mirror_age" -gt "$hours" ]; then
+            echo "警告：異地鏡像已經超過 ${hours} 小時沒有更新，目標硬碟可能沒有掛上"
+            return 1
+        fi
+    fi
+
     echo "檢查通過"
 }
 
