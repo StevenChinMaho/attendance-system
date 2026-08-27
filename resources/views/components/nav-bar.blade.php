@@ -60,6 +60,11 @@
                     身分管理
                 </a>
             @endcan
+            @can('audit.view')
+                <a href="{{ route('admin.audit') }}" class="{{ $linkClass(request()->routeIs('admin.audit')) }}">
+                    稽核紀錄
+                </a>
+            @endcan
         </div>
 
         <div class="flex items-center gap-3">

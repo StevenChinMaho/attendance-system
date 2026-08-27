@@ -72,6 +72,12 @@ Route::middleware(['auth', EnsureAccountIsActive::class, EnsureUserHasChangedPas
     Route::view('/admin/classes', 'admin.classes')->middleware('can:classes.manage')->name('admin.classes');
     Route::view('/admin/roles', 'admin.roles')->middleware('can:roles.manage')->name('admin.roles');
 
+    // 稽核紀錄查閱。獨立一個 audit.view 權限而不是併進 users.manage，
+    // 是因為「誰可以查閱全校的操作紀錄」跟「誰可以建立帳號」是兩件不同
+    // 的事——學務處可能需要查紀錄但不該能改帳號，反之亦然。頁面本身
+    // 唯讀（見 App\Livewire\Admin\AuditLogViewer）。
+    Route::view('/admin/audit', 'admin.audit')->middleware('can:audit.view')->name('admin.audit');
+
     // 學生本體（學號/姓名/性別/帳號連結/轉出狀態）跟「這個學生屬於哪個
     // 班」是兩個不同層次的動作（見 App\Livewire\Admin\StudentManager
     // 開頭的說明），所以是兩個獨立頁面：這裡是全校學生管理，不掛在

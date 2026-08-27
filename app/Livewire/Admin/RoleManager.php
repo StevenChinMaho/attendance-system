@@ -47,6 +47,7 @@ class RoleManager extends Component
         'classes.manage' => '班級管理',
         'students.manage' => '學生管理',
         'roles.manage' => '身分管理',
+        'audit.view' => '稽核紀錄',
     ];
 
     public string $name = '';

@@ -31,6 +31,7 @@ class RolePermissionSeeder extends Seeder
             'classes.manage',           // /admin/classes：新增/修改班級
             'students.manage',          // /admin/classes/{id}/students：編輯學生資訊
             'roles.manage',             // /admin/roles：新增角色、調整角色的權限
+            'audit.view',               // /admin/audit：查閱稽核紀錄（全校範圍，唯讀）
         ];
 
         foreach ($permissions as $permission) {
