@@ -28,7 +28,11 @@
   ║  ┌──────────────┐  fastcgi  ┌──────────┐   ┌───────────┐  ║
   ║  │ web (nginx)  │──────────▶│ app      │──▶│ mariadb   │  ║
   ║  │ 靜態檔直接吐 │  :9000    │ php-fpm  │   │ (volume)  │  ║
-  ║  └──────────────┘           └──────────┘   └───────────┘  ║
+  ║  └──────────────┘           └──────────┘   └─────▲─────┘  ║
+  ║                                                  │        ║
+  ║                              ┌──────────┐   每日 dump     ║
+  ║   主機目錄 ◀────────────────│ backup   │────────┘        ║
+  ║   ${BACKUP_PATH}             └──────────┘                 ║
   ║                                                           ║
   ║  對 host 發佈的 port：完全沒有。                          ║
   ╚═══════════════════════════════════════════════════════════╝
@@ -48,6 +52,7 @@
 | `app` | 自建（`target: runtime`）約 235MB | 無狀態 | php-fpm 8.5。程式碼與 vendor 為 root 所有、對 www-data 唯讀 |
 | `web` | 自建（`target: web`）約 93MB | 無狀態 | nginx。`public/` 靜態檔烤在映像裡 |
 | `mariadb` | `mariadb:12.3` | **有狀態** | 資料在 named volume `db-data` |
+| `backup` | `mariadb:12.3`（沿用，不另外建映像） | 無狀態 | 每日 dump 到 `BACKUP_PATH` 指定的**主機**目錄 |
 | `cloudflared` | `cloudflare/cloudflared:2026.8.2` | 無狀態 | 版本刻意釘死，不用 `:latest` |
 
 **整個系統唯一有狀態的地方是 `db-data` 這個 volume。** 其餘容器都可以隨時砍掉重建，
@@ -56,8 +61,9 @@
 ### 不需要的東西
 
 - **不需要 Redis**：session／cache／queue 全部用 `database` driver，對應資料表都在 migration 裡。
-- **不需要 queue worker、不需要 cron 容器**：全專案沒有任何 `dispatch()`／`ShouldQueue`／
-  Mail／Notification，`routes/console.php` 也沒有排程。
+- **不需要 queue worker、不需要 Laravel 排程容器**：全專案沒有任何 `dispatch()`／
+  `ShouldQueue`／Mail／Notification，`routes/console.php` 也沒有排程。
+  （`backup` 服務有自己的計時迴圈，跟 Laravel 的 scheduler 無關。）
 - **不需要 SMTP**：沒有註冊流程也沒有密碼重設信，帳號一律由管理者建立與重設。
 - **不需要在 nginx 設定 TLS**：憑證由 Cloudflare edge 處理。
 
@@ -458,7 +464,8 @@ migration，回到舊程式碼會面對一個「比它新」的 schema。這通�
 
 ### 6.7 新增背景工作或排程要一起補容器
 
-目前沒有 queue worker 也沒有 cron 容器，因為專案裡一個都沒用到。如果之後加了
+目前沒有 queue worker 也沒有 Laravel 排程容器，因為專案裡一個都沒用到
+（`backup` 服務跑的是自己的 shell 計時迴圈，不經過 Laravel 的 scheduler）。如果之後加了
 `ShouldQueue` 的 job 或 `routes/console.php` 的排程，**它們在正式環境不會被執行**——
 不會報錯，就只是永遠不動。屆時要在 `compose.production.yaml` 加對應的服務
 （`php artisan queue:work` / `php artisan schedule:work`）。
@@ -641,33 +648,116 @@ attendance exec app php artisan tinker --execute='App\Models\User::pluck("userna
 
 ## 9. 待辦（重要）
 
-### 資料庫備份 —— 尚未實作
+### 資料庫備份
 
-**目前沒有任何自動備份。** 整個系統唯一有狀態的地方是 `db-data` volume，一旦伺服器
-硬碟損壞或有人誤下 `attendance down -v`，全校的點名紀錄與稽核歷程就沒了。
+備份由 compose 的 `backup` 服務自動執行，`attendance up -d` 就會生效——刻意做成
+容器而不是主機 cron，因為主機 cron 是主機專屬設定，換一台機器就要重做一次，
+而「忘記手動步驟」這件事在這個專案已經出過兩次事。
 
-> 這不是假設性的風險：測試環境已經因為 `down -v` 整個資料庫被清空過一次
-> （見第 4 節的專案名稱說明）。當時沒有備份，資料完全救不回來。
+**設定**（`.env.production`，見 `.env.production.example` 的完整說明）：
 
-手動備份（升級 MariaDB 或做破壞性 migration 前**務必**先跑）：
+| 變數 | 說明 |
+|---|---|
+| `BACKUP_PATH` | 備份檔放在主機的哪個目錄。**必須是主機路徑，不能是 docker volume** |
+| `BACKUP_UID` / `BACKUP_GID` | 備份檔的擁有者（用 `id -u` / `id -g` 查部署帳號） |
+| `BACKUP_HOUR` | 每天幾點跑，預設 3（UTC） |
+| `BACKUP_KEEP_DAILY` / `BACKUP_KEEP_MONTHLY` | 保留份數，預設 30 日 + 12 月 |
+| `BACKUP_MONITOR_ENABLED` | 開啟後台的「備份過期」警告 |
+
+`BACKUP_PATH` 一定要是主機目錄的理由很直接：`docker compose down -v` 會把專案宣告的
+volume 全部刪掉，備份跟資料庫一起消失的話這整套就沒有意義——而那正是實際發生過的
+事故（見第 4 節）。
+
+首次設定：
 
 ```bash
 mkdir -p /opt/attendance-backups
-attendance exec -T mariadb \
-    mariadb-dump -u root -p"$(grep '^DB_ROOT_PASSWORD=' /opt/attendance-system/.env.production | cut -d= -f2-)" \
-    --single-transaction --routines --events attendance_system \
-    | gzip > /opt/attendance-backups/attendance-$(date +%F-%H%M).sql.gz
+chown "$(id -u):$(id -g)" /opt/attendance-backups
+chmod 700 /opt/attendance-backups
+attendance up -d
 ```
 
-還原：
+備份容器啟動時，如果當天還沒有備份就會先跑一次——這樣裝好立刻看得到結果，
+不必等到隔天凌晨才知道設定對不對。
+
+**日常操作**（全部透過備份容器，在任何主機上都一樣）：
 
 ```bash
-gunzip -c /opt/attendance-backups/attendance-2026-08-27-0300.sql.gz \
-  | attendance exec -T mariadb mariadb -u root -p"<root 密碼>" attendance_system
+attendance logs backup                                    # 看備份記錄
+attendance exec backup backup.sh list                     # 列出所有備份檔
+attendance exec backup backup.sh once                     # 立刻備份一次
+attendance exec backup backup.sh verify                   # 檢查最新備份還在且夠新
 ```
 
-之後要做的自動化方向：把上面那段包成腳本放進 host 的 cron（每日凌晨），保留 N 天，
-並且**實際測試過一次還原**——沒有還原過的備份不算備份。
+**還原**：
+
+```bash
+attendance exec backup backup.sh list
+attendance exec backup backup.sh restore <檔名>            # 不加 --confirm 只會顯示將要做什麼
+attendance exec backup backup.sh restore <檔名> --confirm  # 真的執行
+attendance restart app                                    # 讓 migration 補上結構差異
+```
+
+還原會先清空現有資料表再載入，所以是破壞性操作，必須明確加上 `--confirm`。
+
+**備份不依賴任何密碼。** dump 是純文字 SQL，裡面不含資料庫帳號（只 dump
+`attendance_system`，使用者帳號在 `mysql` 系統資料庫裡）。就算 `.env.production`
+連同 `DB_PASSWORD`、`APP_KEY` 全部弄丟，也能把備份還原到一組全新密碼的環境
+——實測驗證過，包括使用者原本的登入密碼仍然可用（密碼是 bcrypt 雜湊，跟
+`APP_KEY` 無關；專案裡也沒有任何 `encrypted` 欄位）。弄丟 `APP_KEY` 的唯一後果是
+所有人被登出一次。
+
+> 順帶一提：只要容器還在跑，`.env.production` 的內容都能從
+> `docker inspect <容器> --format '{{.Config.Env}}'` 撈回來，不需要動用任何救援模式。
+
+### 還原演練
+
+**沒有還原過的備份不算備份。** 演練可以在同一台機器上安全進行——用 `-p` 開一個
+丟棄式的 compose 專案，完全不會碰到正式那組（`-p` 的優先權高於檔案裡的 `name:`）：
+
+```bash
+# 1. 準備一份演練用的設定：換掉密碼與備份目錄，其餘照舊
+sed -e 's|^BACKUP_PATH=.*|BACKUP_PATH=/tmp/restore-drill|' .env.production > /tmp/.env.drill
+mkdir -p /tmp/restore-drill/daily
+cp /opt/attendance-backups/daily/<要驗證的檔名> /tmp/restore-drill/daily/
+
+# 2. 只起 mariadb 與 backup（app 不需要，它的 env_file 是寫死的路徑）
+DRILL="docker compose -p attendance-restore-drill --env-file /tmp/.env.drill -f compose.production.yaml"
+$DRILL up -d mariadb backup
+
+# 3. 還原並檢查筆數
+$DRILL exec backup backup.sh restore <檔名> --confirm
+$DRILL exec -T mariadb sh -c 'MYSQL_PWD=$MARIADB_PASSWORD mariadb -u $MARIADB_USER $MARIADB_DATABASE \
+    -e "select (select count(*) from users) as users, (select count(*) from students) as students;"'
+
+# 4. 清掉演練環境（-p 保證只動到演練那一組）
+$DRILL down -v && rm -rf /tmp/restore-drill /tmp/.env.drill
+```
+
+建議每學期做一次，並且在做破壞性 migration 或升級 MariaDB 之前也做一次。
+
+### 備份過期警告
+
+備份最常見的失敗方式不是當下報錯，而是某天默默停掉、直到真的需要還原時才發現。
+所以備份容器每次成功都會往資料庫寫一筆心跳，**超過 `BACKUP_WARN_AFTER_HOURS`
+（預設 48）小時沒有心跳，有 `audit.view` 權限的帳號就會在每一頁看到警示橫幅**。
+
+48 小時代表「連續漏掉兩次」——抓 24 小時的話稍微延遲就會誤報。
+
+心跳證明的是「備份程序有跑完」，不證明「檔案現在還在」（例如有人把目錄清掉）。
+後者由 `backup.sh verify` 檢查實體檔案，兩者互補，做還原演練時順手跑一次。
+
+### 待辦：異地備份
+
+**目前備份跟資料庫在同一顆硬碟上，只防誤刪，不防硬體故障。** 要真正安全，備份必須
+複製到另一台機器。方向：在主機上加一條 cron 做 `rsync` 到校內另一台機器或 NAS。
+
+如果要傳到校外的儲存空間，請先加密——dump 檔裡有全校學生姓名、學號、性別與密碼
+雜湊。`age` 或 `gpg` 都可以，代價是多一組金鑰要保管（而且那組金鑰弄丟，備份就真的
+救不回來了，跟前面說的「不依賴密碼」不同）。
+
+跑在 WSL 上時要特別注意：`/opt` 在 WSL 的虛擬磁碟裡，WSL 一旦被重設，備份跟資料庫
+會一起消失，等於完全沒有隔離。
 
 ### 其他
 

@@ -113,6 +113,44 @@ services:
             retries: 10
             start_period: 30s
 
+    # 資料庫自動備份。用 mariadb 的映像（本來就有，內建 mariadb-dump），
+    # 不必為了備份多拉或多建一個映像。
+    #
+    # 刻意做成容器而不是主機 cron：主機 cron 是「主機專屬」的設定，換一台
+    # 機器就要重做一次，而這個專案已經因為「忘記手動步驟」出過兩次事。
+    # 容器化之後 `up -d` 就自動生效，備份目錄由 BACKUP_PATH 決定，換主機
+    # 只要改 .env.production 的一行。
+    backup:
+        image: mariadb:12.3
+        restart: unless-stopped
+        # 腳本用 bind mount 掛進來而不是烤進映像：這樣調整備份策略不需要
+        # 重建任何映像。路徑相對於這個 compose 檔的位置。
+        entrypoint: ['/usr/local/bin/backup.sh']
+        volumes:
+            - ./docker/production/backup.sh:/usr/local/bin/backup.sh:ro
+            # **一定要是主機目錄，不能是這個專案宣告的 volume。**
+            # `docker compose down -v` 會把專案的 volume 全部刪掉，備份跟
+            # 資料庫一起消失的話，這整個服務就沒有意義了——而那正是我們
+            # 要防的情境之一（見 DEPLOYMENT.md 第 4 節的實際事故）。
+            - '${BACKUP_PATH:?BACKUP_PATH 必須設定（主機上放備份的目錄）}:/backups'
+        # 讓備份檔在主機上的擁有者是部署帳號，才方便複製到異地。
+        user: '${BACKUP_UID:-1000}:${BACKUP_GID:-1000}'
+        environment:
+            DB_HOST: mariadb
+            DB_DATABASE: '${DB_DATABASE:?}'
+            DB_USERNAME: '${DB_USERNAME:?}'
+            DB_PASSWORD: '${DB_PASSWORD:?}'
+            BACKUP_HOUR: '${BACKUP_HOUR:-3}'
+            BACKUP_KEEP_DAILY: '${BACKUP_KEEP_DAILY:-30}'
+            BACKUP_KEEP_MONTHLY: '${BACKUP_KEEP_MONTHLY:-12}'
+        depends_on:
+            mariadb:
+                condition: service_healthy
+        networks:
+            - internal
+        security_opt:
+            - no-new-privileges:true
+
     cloudflared:
         # 刻意釘死版本而不是用 :latest。這是整個站台的對外入口，
         # 某次 `docker compose pull` 撈到破壞性變更就是全站無預警中斷，

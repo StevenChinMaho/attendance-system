@@ -21,6 +21,7 @@
 <body class="min-h-screen font-sans antialiased">
     @auth
         <x-nav-bar />
+        <x-backup-warning />
     @endauth
     {{ $slot }}
     @livewireScripts
