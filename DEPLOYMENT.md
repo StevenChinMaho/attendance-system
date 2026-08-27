@@ -193,17 +193,23 @@ attendance ps
 > app 容器啟動時，[entrypoint](docker/production/entrypoint.sh) 會自動等資料庫、跑
 > `migrate --force`、重建 config／route／view cache。不需要手動做這些。
 
-### 3.5 建立角色與權限
+### 3.5 確認角色與權限
+
+**這一步是自動的**，不需要手動執行。app 容器每次啟動時，
+[entrypoint](docker/production/entrypoint.sh) 都會跑
+`db:seed --class=RolePermissionSeeder`，建立內建身分（admin／homeroom_teacher／
+student_rep）與所有權限。這個 seeder **不會建立任何帳號**。
+
+之所以自動化，是因為權限是**資料**而不是程式碼（spatie 存在 `permissions` 資料表
+裡）。新版程式碼加了一個權限卻沒有人重跑 seeder 的話，那個權限在資料庫裡根本不
+存在——對應頁面對所有人 403、身分管理也列不出來，而且完全沒有錯誤訊息，只會看
+起來像「功能沒做出來」。這種只能靠人記得的步驟遲早會被漏掉，所以綁進啟動流程。
+
+要確認的話：
 
 ```bash
-attendance exec app php artisan db:seed --class=RolePermissionSeeder --force
+attendance exec app php artisan tinker --execute='echo Spatie\Permission\Models\Permission::count();'
 ```
-
-這會建立 3 個身分（admin／homeroom_teacher／student_rep）與 9 個權限，**不會建立任何帳號**。
-
-> 直接跑 `php artisan db:seed`（不帶 `--class`）在正式環境也是安全的：
-> `DatabaseSeeder` 只有 `RolePermissionSeeder` 在環境判斷之外，示範帳號那一段被
-> `app()->environment(['local','testing'])` 包住。但明確指定 class 意圖更清楚。
 
 ### 3.6 建立第一個管理者帳號
 
@@ -295,7 +301,8 @@ attendance logs --tail 50 app
 ```
 
 `up -d --build` 會重建映像、重建有變動的容器。app 容器啟動時 entrypoint 會自動跑
-`migrate --force` 並重建所有 cache，**不需要手動跑 migration 或 `optimize`**。
+`migrate --force`、同步角色與權限（`RolePermissionSeeder`）並重建所有 cache，
+**不需要手動跑 migration、seeder 或 `optimize`**。
 
 資料庫 volume 不受影響，資料完整保留（已實測驗證）。
 
@@ -365,13 +372,33 @@ migration，回到舊程式碼會面對一個「比它新」的 schema。這通�
 要讀設定值一律透過 `config('xxx.yyy')`；需要新的環境變數就在 `config/` 底下開一個
 對應的 key。本專案目前沒有違規的用法，請維持。
 
-### 6.3 新增設定值要同步更新 `.env.production.example`
+### 6.3 新增權限一定要加進 `RolePermissionSeeder`
+
+權限是資料庫裡的資料，不是程式碼。只在路由上寫 `can:something.manage` 而沒有把
+`something.manage` 加進 `database/seeders/RolePermissionSeeder.php` 的權限清單，
+結果是那個權限在資料庫裡不存在：**頁面對所有人 403（包含管理者），身分管理也列
+不出這個選項可以勾**，而且沒有任何錯誤訊息。
+
+同時記得補上 `RoleManager::PERMISSION_LABELS` 的中文標籤，否則身分管理的表頭會
+顯示英文原始字串（有測試守住這一點）。
+
+**這個 seeder 會在每次容器啟動時執行，所以必須永遠保持冪等**：只能用
+`firstOrCreate`，不能建立帳號，不能刪除任何東西。目前它對三個內建角色做
+`syncPermissions`，這是安全的——那三個角色的權限在 `RoleManager` 裡本來就鎖住
+不能改（`PROTECTED_ROLE_NAMES`），所以不會蓋掉任何人的自訂；自訂角色完全不受影響。
+如果之後修改這個 seeder，務必維持這個性質。
+
+> 注意本機開發環境**不會**自動跑（Sail 沒有這段 entrypoint），所以在開發機上加了
+> 新權限之後要自己跑一次，否則畫面上會看不到：
+> `./vendor/bin/sail artisan db:seed --class=RolePermissionSeeder`
+
+### 6.4 新增設定值要同步更新 `.env.production.example`
 
 `.env.production` 是伺服器上手工維護的檔案，不會因為 `git pull` 自動長出新的變數。
 新增了必填設定卻沒更新範本，部署的人不會知道要補，而症狀通常是某個功能靜默地用了
 預設值。**在 `.env.production.example` 加上該變數並寫清楚怎麼取得。**
 
-### 6.4 前端資產是在建置階段編的
+### 6.5 前端資產是在建置階段編的
 
 `public/build` 在 `.gitignore` 裡，正式環境沒有 node。Vite 的產出是在映像的 `assets`
 階段跑 `npm run build` 產生的，所以：
@@ -385,7 +412,7 @@ migration，回到舊程式碼會面對一個「比它新」的 schema。這通�
   被編進 CSS，畫面在正式環境會少樣式而開發環境正常——屆時要把 `app/` 也加進
   [Dockerfile](docker/production/Dockerfile) 的 assets 階段。
 
-### 6.5 容器裡的檔案系統對 PHP 是唯讀的
+### 6.6 容器裡的檔案系統對 PHP 是唯讀的
 
 程式碼與 `vendor/` 都是 root 所有，php-fpm 以 `www-data` 執行。**唯二可寫的是
 `storage/` 與 `bootstrap/cache/`。**
@@ -397,21 +424,21 @@ migration，回到舊程式碼會面對一個「比它新」的 schema。這通�
 沒有需要長期保存的上傳檔）。如果之後要加「上傳並保存檔案」的功能，就必須在
 `compose.production.yaml` 補一個 volume，否則每次更新都會把使用者上傳的東西弄丟。
 
-### 6.6 新增背景工作或排程要一起補容器
+### 6.7 新增背景工作或排程要一起補容器
 
 目前沒有 queue worker 也沒有 cron 容器，因為專案裡一個都沒用到。如果之後加了
 `ShouldQueue` 的 job 或 `routes/console.php` 的排程，**它們在正式環境不會被執行**——
 不會報錯，就只是永遠不動。屆時要在 `compose.production.yaml` 加對應的服務
 （`php artisan queue:work` / `php artisan schedule:work`）。
 
-### 6.7 時間相關的邏輯
+### 6.8 時間相關的邏輯
 
 `config/app.php` 的 `timezone` 是寫死的 `Asia/Taipei`，不吃環境變數，正式環境不需要
 額外設定。點名日期（`now()->toDateString()`）與點名時段限制
 （`AttendanceWindow` 的 07:00–17:00）都依賴這個值——不要把它改成讀 env，否則正式
 環境漏設就會整個差 8 小時，而且是那種「早上看起來正常、下班後才發現」的錯。
 
-### 6.8 上線前一定要跑過的
+### 6.9 上線前一定要跑過的
 
 ```bash
 ./vendor/bin/sail artisan test     # 全綠
@@ -589,4 +616,4 @@ gunzip -c /opt/attendance-backups/attendance-2026-08-27-0300.sql.gz \
 ### 其他
 
 - 監控／告警（例如站台掛掉時通知）目前沒有。最低限度可以用 Cloudflare 的 health check。
-- `storage/` 沒有掛 volume，若未來新增「保存上傳檔案」的功能必須補上（見 6.5）。
+- `storage/` 沒有掛 volume，若未來新增「保存上傳檔案」的功能必須補上（見 6.6）。
