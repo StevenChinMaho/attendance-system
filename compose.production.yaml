@@ -125,9 +125,18 @@ services:
         restart: unless-stopped
         # 腳本用 bind mount 掛進來而不是烤進映像：這樣調整備份策略不需要
         # 重建任何映像。路徑相對於這個 compose 檔的位置。
-        entrypoint: ['/usr/local/bin/backup.sh']
+        #
+        # **掛「目錄」而不是「單一檔案」，這一點是必要的。**
+        # git pull 不是就地修改檔案，而是寫一個新檔再 rename 蓋過去，
+        # 所以 inode 會變。單一檔案的 bind mount 綁的是掛載當下那個
+        # inode——檔案被換掉之後，執行中的容器仍然看到舊版，而且再也
+        # 重啟不起來（docker 找不到原本的來源，報
+        # "failed to create shim task ... no such file or directory"，
+        # 只能整個 up -d --build 重建）。實測驗證過。
+        # 掛目錄則綁在目錄本身，內容怎麼換都不影響。
+        entrypoint: ['/scripts/backup.sh']
         volumes:
-            - ./docker/production/backup.sh:/usr/local/bin/backup.sh:ro
+            - ./docker/production:/scripts:ro
             # **一定要是主機目錄，不能是這個專案宣告的 volume。**
             # `docker compose down -v` 會把專案的 volume 全部刪掉，備份跟
             # 資料庫一起消失的話，這整個服務就沒有意義了——而那正是我們

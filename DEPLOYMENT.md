@@ -290,8 +290,8 @@ attendance exec app php artisan admin:create
 確認備份也真的在運作：
 
 ```bash
-attendance exec backup backup.sh list           # 應該至少有一份
-attendance exec backup backup.sh verify         # 檢查檔案完整、夠新，並回報鏡像狀態
+attendance exec backup /scripts/backup.sh list           # 應該至少有一份
+attendance exec backup /scripts/backup.sh verify         # 檢查檔案完整、夠新，並回報鏡像狀態
 ./docker/production/mirror-backups.sh status    # 有設定異地的話
 ```
 
@@ -330,8 +330,8 @@ attendance exec app sh
 
 ```bash
 attendance logs backup                          # 備份記錄
-attendance exec backup backup.sh list           # 列出所有備份檔
-attendance exec backup backup.sh verify         # 檢查最新備份，並回報異地鏡像狀態
+attendance exec backup /scripts/backup.sh list           # 列出所有備份檔
+attendance exec backup /scripts/backup.sh verify         # 檢查最新備份，並回報異地鏡像狀態
 ./docker/production/mirror-backups.sh status    # 異地鏡像的詳細狀態
 ```
 
@@ -636,6 +636,18 @@ session 寫不進去或 cookie 沒被瀏覽器接受。檢查：
 
 用了 `restart`。要用 `attendance up -d`。見第 4 節的警告。
 
+**`restart` 某個容器時報 `failed to create shim task ... no such file or directory`**
+
+發生在「bind mount 掛進容器的檔案被 `git pull` 換掉之後」。git 不是就地修改檔案，
+而是寫一個新檔再 `rename` 蓋過去，所以 inode 會變；而**單一檔案**的 bind mount 綁的是
+容器建立當下那個 inode，舊的消失之後就再也掛不上。執行中的容器也還是看到舊內容。
+
+`up -d --build`（或 `up -d`）可以解決，因為那會重建容器、重新解析掛載來源。
+
+本專案的 `backup` 服務因此改成掛**整個 `docker/production` 目錄**而不是單一檔案
+（目錄的 inode 不會因為內容更換而變），所以現在 `restart` 是安全的。如果之後要再
+掛任何腳本或設定檔進容器，請一律掛目錄，不要掛單一檔案。
+
 **容器莫名其妙被重建，或資料庫突然變空的**
 
 `compose.production.yaml` 的專案名稱是寫死的（`name: attendance-system-production`），
@@ -735,7 +747,7 @@ attendance exec app php artisan tinker --execute='App\Models\User::pluck("userna
 
 ```bash
 # 7. 確認備份真的在跑，而且還原過至少一次
-attendance exec backup backup.sh verify
+attendance exec backup /scripts/backup.sh verify
 # 沒有做過還原演練的話，現在做（見第 9 節）——沒有還原過的備份不算備份
 ```
 
@@ -781,17 +793,17 @@ volume 全部刪掉，備份跟資料庫一起消失的話這整套就沒有意�
 
 ```bash
 attendance logs backup                                    # 看備份記錄
-attendance exec backup backup.sh list                     # 列出所有備份檔
-attendance exec backup backup.sh once                     # 立刻備份一次
-attendance exec backup backup.sh verify                   # 檢查最新備份還在且夠新
+attendance exec backup /scripts/backup.sh list                     # 列出所有備份檔
+attendance exec backup /scripts/backup.sh once                     # 立刻備份一次
+attendance exec backup /scripts/backup.sh verify                   # 檢查最新備份還在且夠新
 ```
 
 **還原**：
 
 ```bash
-attendance exec backup backup.sh list
-attendance exec backup backup.sh restore <檔名>            # 不加 --confirm 只會顯示將要做什麼
-attendance exec backup backup.sh restore <檔名> --confirm  # 真的執行
+attendance exec backup /scripts/backup.sh list
+attendance exec backup /scripts/backup.sh restore <檔名>            # 不加 --confirm 只會顯示將要做什麼
+attendance exec backup /scripts/backup.sh restore <檔名> --confirm  # 真的執行
 attendance restart app                                    # 讓 migration 補上結構差異
 ```
 
@@ -823,7 +835,7 @@ DRILL="docker compose -p attendance-restore-drill --env-file /tmp/.env.drill -f 
 $DRILL up -d mariadb backup
 
 # 3. 還原並檢查筆數
-$DRILL exec backup backup.sh restore <檔名> --confirm
+$DRILL exec backup /scripts/backup.sh restore <檔名> --confirm
 $DRILL exec -T mariadb sh -c 'MYSQL_PWD=$MARIADB_PASSWORD mariadb -u $MARIADB_USER $MARIADB_DATABASE \
     -e "select (select count(*) from users) as users, (select count(*) from students) as students;"'
 
@@ -881,7 +893,7 @@ BACKUP_MIRROR_PATH=/mnt/wsl/PHYSICALDRIVE2p2/attendance-backups
 
 ```bash
 ./docker/production/mirror-backups.sh status
-attendance exec backup backup.sh verify         # 會一併回報鏡像的同步時間
+attendance exec backup /scripts/backup.sh verify         # 會一併回報鏡像的同步時間
 ```
 
 **這一支刻意跑在主機上，不是容器。** 目標若是 WSL 掛載的實體硬碟，掛載狀態隨時
