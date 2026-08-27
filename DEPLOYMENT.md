@@ -153,6 +153,14 @@ chmod 600 .env.production
 `.env.production` 已經在 `.gitignore` 與 `.dockerignore` 裡，不會進版本控制，也不會被
 烤進映像——設定值是容器啟動時由 compose 注入的。
 
+填完之後檢查一次有沒有漏掉或忘了填值的：
+
+```bash
+./docker/production/env-check.sh
+```
+
+往後每次 `git pull` 之後也要跑這一步，理由見[第 5.1 節](#51-功能性更新改了程式碼)。
+
 ### 3.3 設定指令捷徑（強烈建議）
 
 正式環境的每個 compose 指令都必須帶兩個旗標，漏掉任何一個都會出事，所以先包成函式：
@@ -330,13 +338,34 @@ git rev-parse --short HEAD
 # 2. 取得新版程式碼
 git pull
 
-# 3. 重建映像並套用
+# 3. 檢查有沒有新增的設定要補（見下方說明，這一步很容易被忽略）
+./docker/production/env-check.sh
+
+# 4. 重建映像並套用
 attendance up -d --build
 
-# 4. 確認
+# 5. 確認
 attendance ps
 attendance logs --tail 50 app
 ```
+
+**第 3 步不能省。** `.env.production` 不進版本控制（裡面是機密），但
+`.env.production.example` 會隨著新功能長出新變數——而缺少的那些**大多不會報錯**：
+compose 只對少數用 `${VAR:?}` 寫法的變數會直接擋下來，其餘走 `env_file` 的設定一旦
+缺少，Laravel 就安靜地用 `config/*.php` 裡的預設值。症狀因此都是「某個功能看起來
+沒做出來」而不是「系統壞掉」，例如 `BACKUP_MONITOR_ENABLED` 沒設，備份過期警告就
+永遠不會出現。
+
+`env-check.sh` 會列出缺少的設定、值還沒填的設定（空值、或 `APP_URL` 仍是範本值），
+以及範本裡已經沒有的舊設定。要自動補上的話：
+
+```bash
+./docker/production/env-check.sh --sync
+```
+
+它會把缺少的設定**連同範本裡的說明註解**附加到 `.env.production` 末端，你只要逐一
+確認值即可（機密欄位在範本裡是空的，必須自己填）。它只新增、不修改也不刪除既有的
+行——誤刪一個還在用的設定，比留著一個沒用的糟得多。
 
 `up -d --build` 會重建映像、重建有變動的容器。app 容器啟動時 entrypoint 會自動跑
 `migrate --force`、同步角色與權限（`RolePermissionSeeder`）並重建所有 cache，
