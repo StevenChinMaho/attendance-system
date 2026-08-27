@@ -93,7 +93,7 @@ class User extends Authenticatable
             return $this->student->schoolClasses()
                 ->orderByDesc('academic_year')
                 ->orderByDesc('semester')
-                ->orderByClassNumber()
+                ->orderByClassCode()
                 ->get();
         }
 
@@ -104,7 +104,7 @@ class User extends Authenticatable
             return $this->teacher->homeroomClasses()
                 ->orderByDesc('academic_year')
                 ->orderByDesc('semester')
-                ->orderByClassNumber()
+                ->orderByClassCode()
                 ->get();
         }
 

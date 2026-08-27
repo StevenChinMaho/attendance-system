@@ -59,8 +59,7 @@ class StatusBoard extends Component
                 // 時段），summarize() 自己依時段分組。
                 $query->where('date', $this->date)->with(['records.followUps']);
             }])
-            ->orderBy('grade')
-            ->orderByClassNumber()
+            ->orderByClassCode()
             ->get();
 
         return view('livewire.attendance.status-board', [

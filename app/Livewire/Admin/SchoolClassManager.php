@@ -247,8 +247,7 @@ class SchoolClassManager extends Component
             'classes' => SchoolClass::with(['homeroomTeacher.user', 'students'])
                 ->where('academic_year', $this->selectedAcademicYear)
                 ->where('semester', $this->selectedSemester)
-                ->orderBy('grade')
-                ->orderByClassNumber()
+                ->orderByClassCode()
                 ->paginate(15),
             'teachers' => Teacher::with('user')->orderBy('teacher_name')->get(),
             'availableUsersForTeacher' => User::availableForLinking()->orderBy('name')->get(),

@@ -88,6 +88,25 @@ class StudentManagerFilteringTest extends TestCase
             ->assertDontSee('男同學');
     }
 
+    /**
+     * 班級篩選選單的順序要跟班級管理頁一致：年級優先、再班級編號。
+     * 只排 class_number 的話會變成 1年1班、3年1班、2年1班、… 這種
+     * 「所有 1 號班擠在最前面」的順序（實際回報過的問題）。
+     */
+    public function test_the_class_filter_options_are_in_natural_class_order(): void
+    {
+        $admin = $this->admin();
+
+        SchoolClass::factory()->create(['grade' => 3, 'class_number' => 1]);
+        SchoolClass::factory()->create(['grade' => 1, 'class_number' => 2]);
+        SchoolClass::factory()->create(['grade' => 2, 'class_number' => 1]);
+        SchoolClass::factory()->create(['grade' => 1, 'class_number' => 1]);
+
+        Livewire::actingAs($admin)
+            ->test(StudentManager::class)
+            ->assertSeeInOrder(['1年1班', '1年2班', '2年1班', '3年1班']);
+    }
+
     public function test_the_class_filter_narrows_to_one_class(): void
     {
         $admin = $this->admin();

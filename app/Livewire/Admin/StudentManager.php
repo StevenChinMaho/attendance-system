@@ -358,7 +358,7 @@ class StudentManager extends Component
             'filterableClasses' => SchoolClass::query()
                 ->where('academic_year', $this->selectedAcademicYear)
                 ->where('semester', $this->selectedSemester)
-                ->orderByClassNumber()
+                ->orderByClassCode()
                 ->get(),
         ]);
     }
@@ -372,7 +372,7 @@ class StudentManager extends Component
             ->with(['schoolClasses' => fn ($query) => $query
                 ->where('academic_year', $this->selectedAcademicYear)
                 ->where('semester', $this->selectedSemester)
-                ->orderByClassNumber()])
+                ->orderByClassCode()])
             ->withCount('attendanceRecords')
             ->when($this->search !== '', function (Builder $query) {
                 // 括號包住整組 OR，否則會跟後面的性別／班級／狀態條件

@@ -78,11 +78,24 @@ class SchoolClass extends Model
         return "{$this->grade}年{$this->class_number}班";
     }
 
-    public function scopeOrderByClassNumber(Builder $query): Builder
+    /**
+     * 班級的自然排列順序：1年1班、1年2班、…、2年1班、…、3年4班。
+     *
+     * **年級一定要排在班級編號前面**，因為一個班級的身分是「年級＋班級
+     * 編號」這個組合（學校的三碼班級代號就是這樣編的，見 App\Support\ClassCode）。
+     * 只排 class_number 的話，1年1班／2年1班／3年1班 會全部擠在最前面，
+     * 接著才是所有的 2 號班——這正是這個 scope 原本的行為（它以前叫
+     * orderByClassNumber，名副其實地只排了 class_number），而畫面上看起來
+     * 正常的那幾頁，是各自在呼叫端多寫了一句 orderBy('grade') 補起來的。
+     * 漏寫的地方就會排錯（學生管理的班級篩選選單、導覽列的班級選單都
+     * 中過），所以年級改成放進 scope 裡，呼叫端不必也不應該再自己補。
+     *
+     * class_number 是整數欄位，排序天生正確，不需要 HasNaturalStringSort
+     * 那個「先按長度、再按字典序」的技巧（那是給字串欄位用的，見
+     * Student::scopeOrderBySeatNumber()，座號還是字串）。
+     */
+    public function scopeOrderByClassCode(Builder $query): Builder
     {
-        // class_number 現在是整數，排序天生正確，不再需要 HasNaturalStringSort
-        // 那個「先按長度、再按字典序」的技巧（那是給字串欄位用的，見
-        // Student::scopeOrderBySeatNumber()，座號還是字串）。
-        return $query->orderBy('class_number');
+        return $query->orderBy('grade')->orderBy('class_number');
     }
 }

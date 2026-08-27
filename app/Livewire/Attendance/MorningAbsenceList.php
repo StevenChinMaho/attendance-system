@@ -54,8 +54,7 @@ class MorningAbsenceList extends Component
             ->with(['students.user', 'attendanceSessions' => function ($query) {
                 $query->where('date', $this->date)->where('period', self::PERIOD)->with('records');
             }])
-            ->orderBy('grade')
-            ->orderByClassNumber()
+            ->orderByClassCode()
             ->get();
 
         return view('livewire.attendance.morning-absence-list', [
