@@ -3,6 +3,9 @@
 這份文件涵蓋：在一台全新的 Ubuntu server 上從零把系統跑起來、日常怎麼管理、
 怎麼套用更新，以及**怎麼寫更新才能保證在正式環境正確生效**。
 
+**第一次部署請照[第 3 節](#3-從零建置)從 3.1 依序做到 3.9**，做完就是一套含自動備份
+與異地鏡像的完整環境；第 4 節之後是日常維運與參考資料。
+
 開發環境（Laravel Sail）的操作不在這裡，見 [CLAUDE.md](CLAUDE.md)。
 兩套環境完全獨立，不共用任何檔案：Sail 用 `compose.yaml`，正式環境用
 `compose.production.yaml`，映像也是分開建的。
@@ -74,8 +77,10 @@
 在伺服器上：
 
 - Docker Engine + Compose plugin（`docker compose version` 要能跑）
-- `git`
+- `git`、`rsync`
 - 這個系統本身不需要對外開任何防火牆 port
+- **第二顆實體硬碟（強烈建議）**：備份跟資料庫放在同一顆碟上只防誤刪、不防硬體
+  故障。有第二顆碟才有真正的第二份，見 [3.8](#38-設定異地備份強烈建議)。
 
 在 Cloudflare：
 
@@ -147,8 +152,13 @@ chmod 600 .env.production
 | `DB_ROOT_PASSWORD` | `openssl rand -base64 32`（跟上面不同的一組） |
 | `TUNNEL_TOKEN` | Cloudflare 儀表板上那串 |
 | `APP_URL` | 你的正式網址，**必須是 `https://`、結尾不要有斜線** |
+| `BACKUP_UID` / `BACKUP_GID` | 用 `id -u` / `id -g` 查部署帳號的值 |
 
 `APP_URL` 填錯會讓**所有**請求被擋成 400：`trustHosts()` 只信任這個網址的主機名。
+
+備份相關的其餘變數（`BACKUP_PATH`、`TZ`、`BACKUP_HOUR`、保留份數、過期警告）都有
+合理的預設值，範本裡也已經填好，照著用即可；要改的話每一項在範本裡都有說明。
+異地鏡像的 `BACKUP_MIRROR_PATH` 留到 [3.8](#38-設定異地備份強烈建議) 再填。
 
 `.env.production` 已經在 `.gitignore` 與 `.dockerignore` 裡，不會進版本控制，也不會被
 烤進映像——設定值是容器啟動時由 compose 注入的。
@@ -187,7 +197,21 @@ source ~/.bashrc
 
 以下都用 `attendance` 這個捷徑。
 
-### 3.4 建置並啟動
+### 3.4 建立備份目錄
+
+**這一步要在啟動之前做。** `backup` 服務會把 `BACKUP_PATH` 指定的主機目錄掛進容器，
+目錄不存在的話 docker 會自動建立，但擁有者會是 root——備份檔之後就變成 root 所有，
+複製到異地時會卡權限。
+
+```bash
+mkdir -p /opt/attendance-backups
+chmod 700 /opt/attendance-backups          # 裡面有全校學生資料與密碼雜湊
+id -u; id -g                               # 確認跟 .env.production 的 BACKUP_UID/GID 一致
+```
+
+備份的運作方式、保留策略與還原程序見[第 9 節](#9-備份與還原)，這裡只需要把目錄準備好。
+
+### 3.5 建置並啟動
 
 ```bash
 attendance up -d --build
@@ -202,12 +226,18 @@ mariadb 健康後才起 app，web 健康後才起 cloudflared。
 attendance ps
 ```
 
-四個服務都應該是 `Up`，`mariadb` 與 `web` 應該是 `(healthy)`。
+五個服務都應該是 `Up`，`mariadb` 與 `web` 應該是 `(healthy)`。
 
 > app 容器啟動時，[entrypoint](docker/production/entrypoint.sh) 會自動等資料庫、跑
-> `migrate --force`、重建 config／route／view cache。不需要手動做這些。
+> `migrate --force`、同步角色與權限、重建 config／route／view cache。不需要手動做這些。
 
-### 3.5 確認角色與權限
+`backup` 容器啟動時如果當天還沒有備份就會先跑一次，所以裝好立刻看得到結果：
+
+```bash
+attendance logs backup
+```
+
+### 3.6 確認角色與權限
 
 **這一步是自動的**，不需要手動執行。app 容器每次啟動時，
 [entrypoint](docker/production/entrypoint.sh) 都會跑
@@ -225,7 +255,7 @@ student_rep）與所有權限。這個 seeder **不會建立任何帳號**。
 attendance exec app php artisan tinker --execute='echo Spatie\Permission\Models\Permission::count();'
 ```
 
-### 3.6 建立第一個管理者帳號
+### 3.7 建立第一個管理者帳號
 
 ```bash
 attendance exec app php artisan admin:create
@@ -236,10 +266,37 @@ attendance exec app php artisan admin:create
 
 **密碼不接受用參數傳入**，那會留在 shell history 跟 `ps` 的輸出裡。
 
-### 3.7 驗收
+### 3.8 設定異地備份（強烈建議）
+
+到這裡備份已經在跑了，但它跟資料庫在同一顆硬碟上——**只防誤刪，不防硬體故障**。
+要真正安全，備份必須複製到另一顆實體硬碟。
+
+在 `.env.production` 填上目標，然後：
+
+```bash
+./docker/production/mirror-backups.sh init      # 建目錄與標記檔（會用到 sudo）
+./docker/production/mirror-backups.sh install   # 安裝每日 03:30 的 cron
+./docker/production/mirror-backups.sh status    # 確認
+```
+
+沒有第二顆硬碟的話，`BACKUP_MIRROR_PATH` 留空即可，這一步跳過——但請把它記成待辦，
+別當作已經完成。細節與 WSL 特有的陷阱見[第 9 節](#異地備份複製到第二顆實體硬碟)。
+
+### 3.9 驗收
 
 打開 `https://你的網址`，應該看到登入頁。用剛建立的帳號登入 → 會被導去變更密碼 →
 改完之後進入即時看板。
+
+確認備份也真的在運作：
+
+```bash
+attendance exec backup backup.sh list           # 應該至少有一份
+attendance exec backup backup.sh verify         # 檢查檔案完整、夠新，並回報鏡像狀態
+./docker/production/mirror-backups.sh status    # 有設定異地的話
+```
+
+**最後做一次還原演練。** 沒有還原過的備份不算備份，而演練可以在同一台機器上安全
+進行（見[第 9 節的還原演練](#還原演練)）——上線前做一次，之後每學期一次。
 
 接著照 [第 8 節的上線前檢查清單](#8-上線前資安檢查清單)跑一遍。
 
@@ -269,6 +326,15 @@ attendance exec app php artisan migrate:status
 attendance exec app sh
 ```
 
+備份（完整說明見[第 9 節](#9-備份與還原)）：
+
+```bash
+attendance logs backup                          # 備份記錄
+attendance exec backup backup.sh list           # 列出所有備份檔
+attendance exec backup backup.sh verify         # 檢查最新備份，並回報異地鏡像狀態
+./docker/production/mirror-backups.sh status    # 異地鏡像的詳細狀態
+```
+
 管理資料庫：
 
 ```bash
@@ -285,7 +351,7 @@ attendance exec mariadb mariadb -u attendance -p attendance_system
 | 指令 | 後果 |
 |---|---|
 | `attendance down` | 安全。只停容器，資料留在 volume |
-| `attendance down -v` | **會刪掉資料庫 volume，全校點名紀錄全滅**。除非你真的要重來，否則永遠不要打 `-v` |
+| `attendance down -v` | **會刪掉資料庫 volume，全校點名紀錄全滅**。除非你真的要重來，否則永遠不要打 `-v`。（備份檔在主機目錄上，不會被一起刪掉——這正是 `BACKUP_PATH` 不能用 docker volume 的原因） |
 | `attendance up -d --build` | 安全。重建映像並套用 |
 | `docker system prune -a` | 會刪掉沒在用的映像（含你的回滾目標），volume 不受影響。要用請加 `--volumes` 以外的形式 |
 
@@ -667,21 +733,32 @@ attendance exec app php artisan tinker --execute='App\Models\User::pluck("userna
 # 只應該有你自己用 admin:create 建的那些
 ```
 
-7. 用瀏覽器實測登入頻率限制：同一個帳號連續打錯密碼 5 次，第 6 次應該出現
+```bash
+# 7. 確認備份真的在跑，而且還原過至少一次
+attendance exec backup backup.sh verify
+# 沒有做過還原演練的話，現在做（見第 9 節）——沒有還原過的備份不算備份
+```
+
+8. 用瀏覽器實測登入頻率限制：同一個帳號連續打錯密碼 5 次，第 6 次應該出現
    「登入嘗試次數過多，請 N 秒後再試一次。」
 
-8. 用瀏覽器實測權限邊界：用一個學生身分的帳號，手動在網址列輸入
+9. 用瀏覽器實測權限邊界：用一個學生身分的帳號，手動在網址列輸入
    `/admin/users`、`/attendance/{別班的 id}`，都應該得到 403。
 
 ---
 
-## 9. 待辦（重要）
+## 9. 備份與還原
 
-### 資料庫備份
+> **設定步驟在[第 3.4 節](#34-建立備份目錄)與[第 3.8 節](#38-設定異地備份強烈建議)**，
+> 照著第 3 節從頭做一次就會全部設定好。這一節是運作方式與日常操作的參考。
+
+### 運作方式
 
 備份由 compose 的 `backup` 服務自動執行，`attendance up -d` 就會生效——刻意做成
 容器而不是主機 cron，因為主機 cron 是主機專屬設定，換一台機器就要重做一次，
 而「忘記手動步驟」這件事在這個專案已經出過兩次事。
+
+異地鏡像則相反，是主機端的腳本（理由見[下方](#異地備份複製到第二顆實體硬碟)）。
 
 **設定**（`.env.production`，見 `.env.production.example` 的完整說明）：
 
@@ -696,15 +773,6 @@ attendance exec app php artisan tinker --execute='App\Models\User::pluck("userna
 `BACKUP_PATH` 一定要是主機目錄的理由很直接：`docker compose down -v` 會把專案宣告的
 volume 全部刪掉，備份跟資料庫一起消失的話這整套就沒有意義——而那正是實際發生過的
 事故（見第 4 節）。
-
-首次設定：
-
-```bash
-mkdir -p /opt/attendance-backups
-chown "$(id -u):$(id -g)" /opt/attendance-backups
-chmod 700 /opt/attendance-backups
-attendance up -d
-```
 
 備份容器啟動時，如果當天還沒有備份就會先跑一次——這樣裝好立刻看得到結果，
 不必等到隔天凌晨才知道設定對不對。
@@ -849,7 +917,14 @@ service cron status || sudo service cron start
 WSL 每次重啟都要重新啟動 cron 服務（或設定成自動啟動）。這一點跟「硬碟要重新掛載」
 一樣，是 WSL 環境特有的、搬到真正的 Ubuntu server 之後就不存在的問題。
 
-### 其他
+---
 
-- 監控／告警（例如站台掛掉時通知）目前沒有。最低限度可以用 Cloudflare 的 health check。
-- `storage/` 沒有掛 volume，若未來新增「保存上傳檔案」的功能必須補上（見 6.6）。
+## 10. 已知的缺口
+
+- **站台掛掉沒有告警。** 備份有過期警告（見上），但「網站整個連不上」目前沒有任何
+  主動通知——要有人自己發現。最低成本的做法是用 Cloudflare 的 health check。
+- **`storage/` 沒有掛 volume**，容器重建就清空。目前是對的（記錄走 stderr、沒有需要
+  保存的上傳檔），但若未來新增「保存上傳檔案」的功能必須補上，見 [6.6](#66-容器裡的檔案系統對-php-是唯讀的)。
+- **異地備份仍在同一台機器上。** 第二顆硬碟能防硬碟故障，但防不了整台機器出事
+  （失竊、火災、勒索軟體加密整台）。真正的異地要複製到另一台機器或雲端，屆時
+  dump 檔請先加密——裡面有全校學生姓名、學號、性別與密碼雜湊。
