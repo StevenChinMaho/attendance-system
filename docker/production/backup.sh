@@ -60,23 +60,69 @@ wait_for_db() {
     done
 }
 
+# 等 backup_runs 資料表出現。
+#
+# backup 容器不依賴 app 容器（兩者都只等 mariadb healthy），所以第一次
+# 部署時，備份很可能在 app 跑完 migration 之前就完成了——那一刻
+# backup_runs 還不存在，心跳寫不進去。備份檔本身是好的，但後台會顯示
+# 「從來沒有成功備份過」直到隔天凌晨的下一次備份為止。
+#
+# **一個在上線第一天就誤報的監控訊號，會教會使用者忽略它**，那等於毀掉
+# 它的全部價值，所以這裡寧可等一下。等不到也不放棄備份——備份檔遠比
+# 心跳重要，而且 sync_heartbeats() 之後會把漏掉的補回來。
+wait_for_table() {
+    i=0
+    while ! db_query 'select 1 from backup_runs limit 1;' >/dev/null 2>&1; do
+        i=$((i + 1))
+
+        [ "$i" -eq 1 ] && log "等待 backup_runs 資料表（app 容器正在跑 migration）..."
+
+        if [ "$i" -ge 120 ]; then
+            log "警告：等了 120 秒 backup_runs 仍不存在，先繼續備份"
+            return 1
+        fi
+
+        sleep 1
+    done
+}
+
 # 心跳：讓應用程式知道「上一次成功備份是什麼時候」，用來在後台顯示
 # 過期警告（見 config/backup.php 與 App\Support\BackupStatus）。
 #
-# 寫不進去不能讓整個備份被視為失敗——備份檔本身已經好好地產生了，
-# 而 backup_runs 這張表可能只是還沒 migrate（第一次部署時，備份容器
-# 有可能比 app 容器早一步跑起來）。所以這裡只記一行警告。
-write_heartbeat() {
-    file_name="$1"
-    size_bytes="$2"
-    now="$(date '+%Y-%m-%d %H:%M:%S')"
-
-    if db_query "insert into backup_runs (completed_at, file_name, size_bytes, created_at, updated_at)
-                 values ('$now', '$file_name', $size_bytes, '$now', '$now');" >/dev/null 2>&1; then
+# 這裡刻意做成「對照磁碟上的檔案補齊」而不是「備份完寫一筆」：**磁碟上
+# 的檔案才是事實**，心跳只是給應用程式看的投影。用對照的寫法，任何一次
+# 寫入失敗（第一次部署的競態、資料庫短暫不通）都會在下一次備份或下一次
+# 容器啟動時自動補回來，不需要人工介入——原本的寫法只記一行警告就算了，
+# 於是那筆心跳永遠不會出現。
+#
+# 用檔案本身的時間當 completed_at，所以補回來的紀錄仍然反映真實的備份
+# 時間；補一份三天前的舊檔案不會讓過期警告誤判成健康。
+sync_heartbeats() {
+    existing=$(db_query 'select file_name from backup_runs;' 2>/dev/null) || {
+        log "警告：讀不到 backup_runs（資料表可能還沒建立），心跳留待下次補上"
         return 0
-    fi
+    }
 
-    log "警告：心跳寫入失敗（backup_runs 資料表可能還沒建立），備份檔本身正常"
+    inserted=0
+
+    for path in "$BACKUP_DIR"/daily/*.sql.gz; do
+        [ -f "$path" ] || continue
+
+        name=$(basename "$path")
+        printf '%s\n' "$existing" | grep -qxF "$name" && continue
+
+        completed=$(date -r "$path" '+%Y-%m-%d %H:%M:%S')
+        size=$(wc -c < "$path" | tr -d ' ')
+
+        if db_query "insert into backup_runs (completed_at, file_name, size_bytes, created_at, updated_at)
+                     values ('$completed', '$name', $size, '$completed', '$completed');" >/dev/null 2>&1; then
+            inserted=$((inserted + 1))
+        else
+            log "警告：$name 的心跳寫入失敗"
+        fi
+    done
+
+    [ "$inserted" -eq 0 ] || log "補上 $inserted 筆備份心跳"
 }
 
 rotate() {
@@ -157,7 +203,7 @@ run_backup() {
         log "另存每月備份 attendance-${month}.sql.gz"
     fi
 
-    write_heartbeat "$name" "$size"
+    sync_heartbeats
     rotate
 }
 
@@ -279,6 +325,7 @@ case "${1:-loop}" in
     once)
         require_env
         wait_for_db
+        wait_for_table || true
         run_backup
         ;;
 
@@ -307,6 +354,11 @@ case "${1:-loop}" in
         require_env
         log "備份服務啟動：每天 ${BACKUP_HOUR}:00，保留每日 ${KEEP_DAILY} 份、每月 ${KEEP_MONTHLY} 份，輸出到 ${BACKUP_DIR}"
         wait_for_db
+        wait_for_table || true
+
+        # 先把磁碟上已有、但資料庫裡沒有紀錄的備份補上心跳。這一步讓
+        # 「上一次寫心跳時失敗」的狀態在重啟後自己修好，不需要人工介入。
+        sync_heartbeats
 
         # 啟動時如果今天還沒有備份就先跑一次。這樣「剛裝好」立刻看得到
         # 結果，不必等到隔天凌晨才知道設定對不對——而設定錯了卻要等
