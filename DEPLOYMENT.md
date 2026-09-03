@@ -750,51 +750,82 @@ attendance ps          # 應該看得到原本那四個容器
 ## 8. 上線前資安檢查清單
 
 對應 [system_structure.md](system_structure.md) 的「上線前資安檢查清單」，這裡是可以
-逐條照做的版本。
+逐條照做的版本。**下面的指令都可以直接複製貼上，沒有要手動代換的地方。**
+
+> **為什麼那幾條 `wget` 要帶 `Host` 標頭？** 它們是從 `web` 容器內部連 `127.0.0.1`，
+> 不帶標頭的話送出去的是 `Host: 127.0.0.1`，而 `bootstrap/app.php` 的 `trustHosts()`
+> 只接受 `APP_URL` 指定的那個主機名，其他一律回 **400 Bad Request**。
+>
+> 指令裡用 `${APP_URL#*://}` 從容器自己的環境變數取出主機名，所以不必手打。
+> **注意 `Host` 只能放主機名**（`hn-attendance.example.dev`），不能是完整網址
+> ——填成 `https://...` 或結尾多一個 `/` 都會得到 400，那不是站台有問題，是標頭寫錯。
+>
+> 反過來說，**故意填錯 Host 會得到 400，本身就是 `trustHosts()` 正常運作的證明**。
 
 ```bash
 # 1. APP_DEBUG 必須是 false、APP_ENV 必須是 production
 attendance exec app php artisan tinker --execute='echo config("app.debug")?"DEBUG 開著！":"debug=false OK", " / ", config("app.env");'
 ```
+→ 應該印出 `debug=false OK / production`。debug 開著時**任何**錯誤頁都會噴出完整堆疊、
+檔案路徑，以及環境變數的值（含 `DB_PASSWORD`、`APP_KEY`）。
 
 ```bash
-# 2. 亂猜的網址只會得到乾淨的 404／405，不會噴出堆疊追蹤
-attendance exec web wget -qS -O- --header="Host: <你的網址>" http://127.0.0.1/definitely-not-a-route 2>&1 | head -3
-# 應該是 404，且內容裡不能出現 /var/www/html、vendor/laravel、APP_KEY 等字樣
+# 2. 亂猜的網址只會得到乾淨的 404，不會噴出堆疊追蹤
+attendance exec web sh -c 'wget -qS -O- --header="Host: ${APP_URL#*://}" http://127.0.0.1/definitely-not-a-route' 2>&1 | head -20
 ```
+→ 第一行應該是 `HTTP/1.1 404 Not Found`，而且整段輸出裡**不能**出現 `/var/www/html`、
+`vendor/laravel`、`APP_KEY` 這類字樣。（拿到 400 的話先檢查上面那則 Host 說明。）
 
 ```bash
 # 3. 未登入不能碰到任何資料頁
-attendance exec web wget -qS -O- --header="Host: <你的網址>" http://127.0.0.1/dashboard 2>&1 | head -3
-# 應該是 302 導回登入頁
+attendance exec web sh -c 'wget -qS -O- --header="Host: ${APP_URL#*://}" http://127.0.0.1/dashboard' 2>&1 | head -5
 ```
+→ 應該是 `302 Found` 並且 `Location:` 指回登入頁。這是在確認 `routes/web.php` 的
+`auth` middleware 真的包住了每一條路由，沒有漏網的。
 
 ```bash
 # 4. session cookie 必須帶 secure / httponly / samesite
-attendance exec web wget -qS -O /dev/null --header="Host: <你的網址>" http://127.0.0.1/ 2>&1 | grep -i set-cookie
+attendance exec web sh -c 'wget -qS -O /dev/null --header="Host: ${APP_URL#*://}" http://127.0.0.1/' 2>&1 | grep -i set-cookie
 ```
+→ 應該看到 `Set-Cookie: attendance_session=...; path=/; secure; HttpOnly; SameSite=lax`。
+三個旗標缺一不可：少了 `secure`，cookie 會在明文連線上送出；少了 `HttpOnly`，
+JavaScript 讀得到它，一個 XSS 就能直接偷走登入狀態。
+
+> `secure` 是靠 `.env.production` 的 `SESSION_SECURE_COOKIE=true` 明確指定的，
+> 不是靠偵測連線——所以就算這裡是從容器內用 http 連的，旗標也應該在。
+> 沒看到就代表那一行漏了，或 `config:cache` 沒有重跑。
+>
+> 輸出會有**兩條** `Set-Cookie`。要檢查的是 `attendance_session` 那條；
+> 另一條 `XSRF-TOKEN` **本來就沒有 `HttpOnly`**，那不是缺陷——前端要靠
+> JavaScript 讀它才能把 CSRF token 附到請求上，加了 `HttpOnly` 反而會壞掉。
 
 ```bash
-# 5. 確認沒有任何 port 被發佈到 host（Ports 欄不該有 0.0.0.0:xxx->）
-attendance ps --format '{{.Service}}\t{{.Ports}}'
+# 5. 確認沒有任何 port 被發佈到 host
+attendance ps --format '{{.Service}}	{{.Ports}}'
 ```
+→ 像 `web  80/tcp`、`app  9000/tcp` 這樣**沒有箭頭**的是容器內部的埠，正常。
+要抓的是 `0.0.0.0:8080->80/tcp` 這種帶 `->` 的——那代表主機上開了一個洞，
+同網段的人可以繞過 Cloudflare 直連，而整套架構的前提就是「唯一入口是隧道」。
 
 ```bash
 # 6. 確認沒有已知密碼的帳號被 seeder 生出來
 attendance exec app php artisan tinker --execute='App\Models\User::pluck("username")->each(fn($u)=>print($u.PHP_EOL));'
-# 只應該有你自己用 admin:create 建的那些
 ```
+→ 只應該出現你自己用 `admin:create` 建的那幾個。`DatabaseSeeder` 以前會在正式環境
+建出密碼是 `password` 的 admin（現在已經關在 `local`/`testing` 判斷裡），那種帳號
+等於永久後門。
 
 ```bash
 # 7. 確認備份真的在跑，而且還原過至少一次
 attendance exec backup /scripts/backup.sh verify
-# 沒有做過還原演練的話，現在做（見第 9 節）——沒有還原過的備份不算備份
 ```
+→ 應該看到最新備份的檔名與時間，最後一行是 `檢查通過`。
+沒有做過還原演練的話，現在做（見[第 9 節](#還原演練)）——沒有還原過的備份不算備份。
 
-8. 用瀏覽器實測登入頻率限制：同一個帳號連續打錯密碼 5 次，第 6 次應該出現
-   「登入嘗試次數過多，請 N 秒後再試一次。」
+8. **用瀏覽器**實測登入頻率限制：同一個帳號連續打錯密碼 5 次，第 6 次應該出現
+   「登入嘗試次數過多，請 N 秒後再試一次。」這是系統唯一的暴力破解防線。
 
-9. 用瀏覽器實測權限邊界：用一個學生身分的帳號，手動在網址列輸入
+9. **用瀏覽器**實測權限邊界：用一個學生身分的帳號登入，手動在網址列輸入
    `/admin/users`、`/attendance/{別班的 id}`，都應該得到 403。
 
 ---
