@@ -387,16 +387,60 @@ seconds_until_next_run() {
 # compose 的參數與 env 檔。
 #
 # 這是破壞性操作，所以一定要明確加上 --confirm 才會真的執行。
-restore() {
+# 把使用者給的檔名解析成實際路徑，順便把各種打錯的情況講清楚。
+#
+# 這一步刻意跟 restore() 分開，而且在連資料庫「之前」執行：檔名打錯是最
+# 常見的失誤，不該讓人先等 60 秒的資料庫逾時才被告知。
+resolve_backup_file() {
     file="${1:-}"
-    confirm="${2:-}"
 
     [ -n "$file" ] || { echo "用法: backup.sh restore <檔名> --confirm" >&2; return 64; }
 
-    # 只接受檔名，不接受路徑——避免打錯路徑指到別的地方。
-    path="$BACKUP_DIR/daily/$file"
-    [ -f "$path" ] || path="$BACKUP_DIR/monthly/$file"
-    [ -f "$path" ] || { echo "找不到備份檔：$file" >&2; return 1; }
+    # 只接受檔名，不接受路徑。容器裡的備份目錄是 $BACKUP_DIR，跟主機上的
+    # BACKUP_PATH 不同，所以照著主機的 `ls` 貼路徑進來一定找不到——而
+    # 「找不到」配上「我明明看得到這個檔案」是很難自己想通的組合。實際上
+    # 有人因此以為是壓縮格式的問題，把備份 gunzip 掉，反而讓那份備份從
+    # list／輪替／心跳／異地鏡像裡一起消失。
+    case "$file" in
+        */*)
+            echo "只接受檔名，不要帶路徑：$file" >&2
+            echo "（容器裡的備份目錄是 $BACKUP_DIR，跟主機上的路徑不一樣）" >&2
+            echo "請改用：backup.sh restore $(basename "$file")" >&2
+            return 1
+            ;;
+    esac
+
+    for candidate in "$BACKUP_DIR/daily/$file" "$BACKUP_DIR/monthly/$file"; do
+        if [ -f "$candidate" ]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+
+    echo "找不到備份檔：$file" >&2
+
+    # 少打 .gz
+    if [ -f "$BACKUP_DIR/daily/$file.gz" ] || [ -f "$BACKUP_DIR/monthly/$file.gz" ]; then
+        echo "目錄裡有 $file.gz——檔名要連副檔名一起打。" >&2
+    fi
+
+    # 被 gunzip 過：備份一律以 .sql.gz 保存，解開之後檔名不再符合，
+    # 整套機制都會略過它。
+    plain=${file%.gz}
+    if [ "$plain" != "$file" ] &&
+       { [ -f "$BACKUP_DIR/daily/$plain" ] || [ -f "$BACKUP_DIR/monthly/$plain" ]; }; then
+        echo "目錄裡有解壓縮過的 $plain。備份一律以 .sql.gz 保存，解開之後" >&2
+        echo "list／restore／輪替／心跳／異地鏡像都會看不到它——請先壓回去：" >&2
+        echo "  gzip <該檔案>" >&2
+    fi
+
+    return 1
+}
+
+restore() {
+    path="${1:-}"
+    confirm="${2:-}"
+    file=$(basename "$path")
 
     gzip -t "$path" 2>/dev/null || { echo "備份檔的 gzip 檢驗沒有通過，拒絕還原：$file" >&2; return 1; }
 
@@ -462,8 +506,10 @@ case "${1:-loop}" in
 
     restore)
         require_env
+        # 先解析檔名（不需要資料庫），再連線。打錯字不該等 60 秒才知道。
+        resolved=$(resolve_backup_file "${2:-}") || exit $?
         wait_for_db
-        restore "${2:-}" "${3:-}"
+        restore "$resolved" "${3:-}"
         ;;
 
     list)
@@ -475,6 +521,21 @@ case "${1:-loop}" in
         find "$BACKUP_DIR/monthly" -name '*.sql.gz' 2>/dev/null | sort | while read -r f; do
             printf '  %-44s %10s bytes  %s\n' "$(basename "$f")" "$(wc -c < "$f" | tr -d ' ')" "$(date -r "$f" '+%Y-%m-%d %H:%M')"
         done
+
+        # 沒有壓縮的檔案要主動講出來。整套機制都只 glob *.sql.gz，所以一個
+        # 被 gunzip 過的備份會同時從 list、restore、輪替、心跳、異地鏡像消失
+        # ——而它就躺在目錄裡看得見，`ls` 看得到、系統卻說沒有，是最容易
+        # 卡住的一種狀況（實際遇過）。
+        stray=$(find "$BACKUP_DIR/daily" "$BACKUP_DIR/monthly" -name '*.sql' 2>/dev/null | sort)
+        if [ -n "$stray" ]; then
+            echo ""
+            echo "⚠ 下面這些沒有壓縮，整套備份機制都看不到它們"
+            echo "  （list／restore／輪替／心跳／異地鏡像都只認 *.sql.gz）："
+            printf '%s\n' "$stray" | while read -r f; do
+                printf '  %-44s %10s bytes  %s\n' "$(basename "$f")" "$(wc -c < "$f" | tr -d ' ')" "$(date -r "$f" '+%Y-%m-%d %H:%M')"
+            done
+            echo "  壓回去就會恢復正常：gzip <檔案路徑>"
+        fi
         ;;
 
     loop)
