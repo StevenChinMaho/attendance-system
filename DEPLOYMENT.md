@@ -271,16 +271,35 @@ attendance exec app php artisan admin:create
 到這裡備份已經在跑了，但它跟資料庫在同一顆硬碟上——**只防誤刪，不防硬體故障**。
 要真正安全，備份必須複製到另一顆實體硬碟。
 
-在 `.env.production` 填上目標，然後：
+鏡像是**備份容器自己做的**，每次備份完成後順手複製過去——沒有另外的腳本，
+也沒有另外的 cron。設定只有三步：
 
 ```bash
-./docker/production/mirror-backups.sh init      # 建目錄與標記檔（會用到 sudo）
-./docker/production/mirror-backups.sh install   # 安裝每日 03:30 的 cron
-./docker/production/mirror-backups.sh status    # 確認
+# 1. 第二顆碟先用 /etc/fstab 掛好（這裡假設掛在 /mnt/backup），然後建目錄與標記檔
+sudo mkdir -p /mnt/backup/attendance
+sudo chown $(id -u):$(id -g) /mnt/backup/attendance   # 要跟 BACKUP_UID/GID 一致
+sudo chmod 700 /mnt/backup/attendance                 # 裡面有全校學生資料
+echo 'attendance-system 備份鏡像目標，請勿刪除' \
+    > /mnt/backup/attendance/.attendance-mirror-target
+
+# 2. 填進 .env.production
+#    BACKUP_MIRROR_PATH=/mnt/backup/attendance
+
+# 3. 套用。掛載點是容器「建立」時決定的，restart 不會生效，一定要 up -d
+attendance up -d
+
+# 4. 確認
+attendance exec backup /scripts/backup.sh mirror     # 立刻同步一次
+attendance exec backup /scripts/backup.sh verify     # 會回報鏡像的同步時間
 ```
 
+**那個 `.attendance-mirror-target` 標記檔是必要的，不是裝飾。** 碟沒掛上的時候，
+掛載點會是系統碟上一個空目錄——看起來完全正常，備份會安靜地寫進系統碟、跟來源躺在
+一起，等於根本沒有異地備份。標記檔放在「那顆碟上」，碟沒掛就讀不到，同步會被擋下來
+並在 `attendance logs backup` 留下警告。
+
 沒有第二顆硬碟的話，`BACKUP_MIRROR_PATH` 留空即可，這一步跳過——但請把它記成待辦，
-別當作已經完成。細節與 WSL 特有的陷阱見[第 9 節](#異地備份複製到第二顆實體硬碟)。
+別當作已經完成。細節見[第 9 節](#異地備份複製到第二顆實體硬碟)。
 
 ### 3.9 驗收
 
@@ -292,7 +311,6 @@ attendance exec app php artisan admin:create
 ```bash
 attendance exec backup /scripts/backup.sh list           # 應該至少有一份
 attendance exec backup /scripts/backup.sh verify         # 檢查檔案完整、夠新，並回報鏡像狀態
-./docker/production/mirror-backups.sh status    # 有設定異地的話
 ```
 
 **最後做一次還原演練。** 沒有還原過的備份不算備份，而演練可以在同一台機器上安全
@@ -332,7 +350,7 @@ attendance exec app sh
 attendance logs backup                          # 備份記錄
 attendance exec backup /scripts/backup.sh list           # 列出所有備份檔
 attendance exec backup /scripts/backup.sh verify         # 檢查最新備份，並回報異地鏡像狀態
-./docker/production/mirror-backups.sh status    # 異地鏡像的詳細狀態
+attendance exec backup /scripts/backup.sh mirror         # 手動同步一次異地鏡像
 ```
 
 管理資料庫：
@@ -800,9 +818,11 @@ attendance exec backup /scripts/backup.sh verify
 |---|---|
 | `BACKUP_PATH` | 備份檔放在主機的哪個目錄。**必須是主機路徑，不能是 docker volume** |
 | `BACKUP_UID` / `BACKUP_GID` | 備份檔的擁有者（用 `id -u` / `id -g` 查部署帳號） |
-| `BACKUP_HOUR` | 每天幾點跑，預設 3（UTC） |
+| `TZ` | 備份容器的時區，預設 `Asia/Taipei`。`BACKUP_HOUR` 是照這個時區解讀的 |
+| `BACKUP_HOUR` | 每天幾點跑（0-23），預設 3——依 `TZ` 解讀，不是 UTC |
 | `BACKUP_KEEP_DAILY` / `BACKUP_KEEP_MONTHLY` | 保留份數，預設 30 日 + 12 月 |
-| `BACKUP_MONITOR_ENABLED` | 開啟後台的「備份過期」警告 |
+| `BACKUP_MIRROR_PATH` | 異地鏡像的目標目錄（見[下方](#異地備份複製到第二顆實體硬碟)）。留空就是不做 |
+| `BACKUP_MONITOR_ENABLED` / `BACKUP_WARN_AFTER_HOURS` | 後台「備份過期」警告的開關與門檻（預設 48 小時） |
 
 `BACKUP_PATH` 一定要是主機目錄的理由很直接：`docker compose down -v` 會把專案宣告的
 volume 全部刪掉，備份跟資料庫一起消失的話這整套就沒有意義——而那正是實際發生過的
@@ -810,6 +830,17 @@ volume 全部刪掉，備份跟資料庫一起消失的話這整套就沒有意�
 
 備份容器啟動時，如果當天還沒有備份就會先跑一次——這樣裝好立刻看得到結果，
 不必等到隔天凌晨才知道設定對不對。
+
+但補跑的判斷是**「今天這個日期還沒有備份檔」**，所以在 `BACKUP_HOUR` 之後重建容器
+（凌晨 3:00 的排程已經跑完，你早上才 `up -d --build`）當天不會再多備份一份，下一份要
+等隔天凌晨。這是刻意的——重建容器不該每次都生一份備份——代價是間隔可能拉長到 24 小時
+以上，看 `list` 只有一份檔案時不必緊張，`attendance logs backup` 的「下一次備份在 N 秒後」
+會告訴你確切時間。
+
+**每一份 dump 都要通過三道檢查才算數**：先寫成 `.tmp`，全部通過才改成正式檔名（中途
+失敗的半份檔案不會有正式名字，不可能被誤認成可用備份）；小於 `BACKUP_MIN_BYTES`
+（預設 2048）視為失敗；最後跑一次 `gzip -t` 自我檢驗。dump 本身用 `--single-transaction`
+取一致性快照而**不鎖表**——學校白天整天都在點名，備份不能讓系統卡住。
 
 **日常操作**（全部透過備份容器，在任何主機上都一樣）：
 
@@ -847,7 +878,7 @@ attendance restart app                                    # 讓 migration 補上
 丟棄式的 compose 專案，完全不會碰到正式那組（`-p` 的優先權高於檔案裡的 `name:`）：
 
 ```bash
-# 1. 準備一份演練用的設定：換掉密碼與備份目錄，其餘照舊
+# 1. 準備一份演練用的設定：只換備份目錄，其餘照舊（演練用自己的 volume，密碼不必動）
 sed -e 's|^BACKUP_PATH=.*|BACKUP_PATH=/tmp/restore-drill|' .env.production > /tmp/.env.drill
 mkdir -p /tmp/restore-drill/daily
 cp /opt/attendance-backups/daily/<要驗證的檔名> /tmp/restore-drill/daily/
@@ -894,76 +925,53 @@ $DRILL down -v && rm -rf /tmp/restore-drill /tmp/.env.drill
 
 ### 異地備份（複製到第二顆實體硬碟）
 
-備份跟資料庫在同一顆硬碟上時，只防誤刪、不防硬體故障。`mirror-backups.sh` 把備份
-複製到另一顆實體硬碟。
+備份跟資料庫在同一顆硬碟上時，只防誤刪、不防硬體故障。設定 `BACKUP_MIRROR_PATH`
+之後，**備份容器會在每次備份完成後把檔案複製到第二顆碟**——沒有另外的腳本、沒有
+另外的 cron、沒有另外的排程要對時。
 
-在 `.env.production` 設定目標：
-
-```bash
-BACKUP_MIRROR_PATH=/mnt/wsl/PHYSICALDRIVE2p2/attendance-backups
-```
-
-首次設定與安裝排程：
+設定步驟見[第 3.8 節](#38-設定異地備份強烈建議)。日常查看：
 
 ```bash
-./docker/production/mirror-backups.sh init      # 建目錄與標記檔（會用到 sudo）
-./docker/production/mirror-backups.sh install   # 安裝每日 03:30 的 cron
-./docker/production/mirror-backups.sh status    # 確認
-```
-
-日常查看：
-
-```bash
-./docker/production/mirror-backups.sh status
 attendance exec backup /scripts/backup.sh verify         # 會一併回報鏡像的同步時間
+attendance exec backup /scripts/backup.sh mirror         # 手動同步一次
+attendance exec backup /scripts/backup.sh mirror-prune 365   # 刪掉鏡像端超過 N 天的
+attendance logs backup                                   # 同步失敗的原因會記在這裡
 ```
 
-**這一支刻意跑在主機上，不是容器。** 目標若是 WSL 掛載的實體硬碟，掛載狀態隨時
-可能變（WSL 重啟後要重新 `wsl --mount`），而 docker 的 bind mount 是在容器啟動時
-解析的——主機重新掛載之後，容器裡看到的仍然是舊的那一份，會安靜地寫到錯誤的地方。
-主機端的腳本每次都看得到真實狀態。
+#### 同步前的兩道確認
 
-#### ⚠ WSL 掛載的陷阱，以及腳本為什麼要三重確認
+同步不是「目錄存在就寫」。兩項任一不過就拒絕，並在 log 留下警告：
 
-`wsl --mount` 掛上的硬碟出現在 `/mnt/wsl` 底下，而 **`/mnt/wsl` 本身是 tmpfs，
-也就是記憶體**。硬碟沒掛上的時候，那個路徑要嘛不存在，要嘛只是 tmpfs 上一個普通的
-空目錄——`rsync` 會很開心地把備份寫進記憶體裡：看起來一切正常、佔用 RAM、然後在
-下次重啟時全部消失。
+1. **目標目錄裡有 `.attendance-mirror-target` 標記檔。** 這是最關鍵的一項——碟沒掛上
+   的時候，掛載點會是**系統碟上一個空目錄**，看起來完全正常，備份會安靜地寫進系統碟、
+   跟來源躺在一起，等於根本沒有異地備份。標記檔放在那顆碟上，碟沒掛就讀不到。
+2. **來源與目標在不同的裝置上**（比對 `stat -c %d`），否則鏡像沒有意義。
 
-所以「目錄存在」完全不足以當判斷依據。同步前會確認三件事，任何一項不過就拒絕執行：
+碟沒掛上時，同步會被擋下來，但**備份本身照常完成**——鏡像失敗不會讓那次備份被判定
+為失敗，本地檔案才是主要目標。掛回去之後 `attendance restart backup` 或等下一次備份
+就會自動補齊，不必記得手動跑。
 
-1. 目標所在的掛載點真的是一個 mount point
-2. 它的檔案系統不是 `tmpfs`／`ramfs`
-3. 目標目錄裡有 `.attendance-mirror-target` 這個標記檔（`init` 建立的）——證明是
-   「那一顆」碟，而不是剛好掛了別的東西上去
+#### 為什麼是「只複製缺少的檔案」，而不是 rsync
 
-外加確認來源與目標在不同的裝置上，否則鏡像沒有意義。
+備份檔寫好之後就不會再被修改（每日檔名帶時間戳，每月檔只在當月第一次建立），
+所以不需要差異比對——一個迴圈複製「目標端還沒有的檔案」就完全等價，而且 mariadb
+映像裡本來就沒有 rsync，這樣也不必為它多裝套件。複製一樣是先寫 `.tmp` 再改名，
+中途斷掉的半份檔案不會有正式名字。
 
-硬碟沒掛上時，在 Windows 端重新掛載：
+#### 刻意不刪除鏡像端多出來的檔案
 
-```
-wsl --mount \\.\PHYSICALDRIVE2 --partition 2
-```
-
-#### 為什麼不用 `rsync --delete`
-
-鏡像的目的是備援，不是做出一份一模一樣的副本。加了 `--delete` 的話，來源端不管是
-正常輪替、還是有人誤刪整個目錄，都會原封不動地同步過去——那正好把備份最該防的情境
-變成必然發生。
+鏡像的目的是備援，不是做出一份一模一樣的副本。「同步刪除」的話，來源端不管是正常
+輪替、還是有人誤刪整個目錄，都會原封不動地照做一次——那正好把備份最該防的情境變成
+必然發生。
 
 代價是鏡像端會累積：以每天約 15MB 估算，一年不到 6GB。真的需要清理時用
-`mirror-backups.sh prune <天數>`，那是一個明確的決定，不是自動行為。
+`mirror-prune <天數>`，那是一個明確的決定，不是自動行為。
 
-#### cron 在 WSL 上不會自動啟動
-
-`install` 會提醒，但值得再說一次：
-
-```bash
-service cron status || sudo service cron start
-```
-
-WSL 每次重啟都要重新啟動 cron 服務（或設定成自動啟動）。這一點跟「硬碟要重新掛載」
-一樣，是 WSL 環境特有的、搬到真正的 Ubuntu server 之後就不存在的問題。
+> **這一段以前是主機上的獨立腳本（`mirror-backups.sh`）加 cron。** 當時跑在 WSL 上，
+> 目標是 `wsl --mount` 掛的碟：`/mnt/wsl` 本身是 tmpfs、掛載狀態隨時會變、cron 每次
+> 重啟都要手動起來，而 docker 的 bind mount 只在容器建立時解析一次。搬到獨立的
+> Ubuntu server 之後那些前提全部不成立，那支腳本連同它的 `init`／`install`／`status`
+> 子指令都已經移除，改由備份容器一起做掉。
 
 ---
 

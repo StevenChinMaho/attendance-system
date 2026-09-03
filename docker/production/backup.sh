@@ -25,6 +25,13 @@ KEEP_MONTHLY="${BACKUP_KEEP_MONTHLY:-12}"
 # 檔案還是生出來了」——那種檔案看起來存在，還原時才發現是空的。
 MIN_BYTES="${BACKUP_MIN_BYTES:-2048}"
 
+# 異地鏡像的目標（容器內路徑）。空的就是沒有設定異地備份，整段跳過。
+# compose 只在 BACKUP_MIRROR_PATH 有值時把它設成 /mirror，見 compose.production.yaml。
+MIRROR_DIR="${BACKUP_MIRROR:-}"
+
+# 目標目錄裡必須有這個檔案才會同步。理由見 mirror_ready()。
+MIRROR_SENTINEL=".attendance-mirror-target"
+
 log() {
     echo "[backup] $(date '+%Y-%m-%d %H:%M:%S') $*"
 }
@@ -205,6 +212,114 @@ run_backup() {
 
     sync_heartbeats
     rotate
+
+    # 鏡像失敗不能讓整次備份被判定為失敗——本地備份檔已經好好地寫完了，
+    # 那是主要目標。失敗原因會記在 log 裡，而且 verify 會因為 .last-mirror
+    # 沒有更新而報出來。
+    mirror_sync || true
+}
+
+# ---------------------------------------------------------------------
+# 異地鏡像：把備份複製到第二顆實體硬碟
+#
+# 這一段本來是主機上的獨立腳本加 cron，理由是「目標是 WSL 掛載的硬碟，
+# 掛載狀態隨時會變，而 docker 的 bind mount 只在容器啟動時解析一次」。
+# 搬到獨立的 Ubuntu server 之後那個前提不成立了——第二顆碟由 /etc/fstab
+# 開機掛好就一直在——所以整段收進備份容器，跟備份用同一支腳本、同一個
+# 排程、同一個身分執行。少一支腳本、少一份 cron、少一個「換機器要重做」
+# 的手動步驟，而且 .last-mirror 由寫備份的同一個使用者寫入，不會再出現
+# 擁有者對不上而寫不進去的情況。
+# ---------------------------------------------------------------------
+
+# 目標可不可以寫。只剩兩項檢查（原本在 WSL 上還要另外確認掛載點不是
+# tmpfs，那是 /mnt/wsl 特有的問題，一般 server 沒有）：
+#
+#   1. sentinel 檔存在——這是最關鍵的一項。硬碟沒掛上的時候，掛載點
+#      會是根檔案系統上一個空目錄，看起來完全正常，備份會安靜地寫進
+#      系統碟、跟來源躺在一起，等於沒有異地備份。sentinel 是放在「那顆
+#      碟上」的，碟沒掛就讀不到。
+#   2. 來源與目標在不同的裝置上，否則整件事沒有意義。
+mirror_ready() {
+    [ -d "$MIRROR_DIR" ] || { log "警告：鏡像目標 $MIRROR_DIR 不存在，略過"; return 1; }
+
+    if [ ! -f "$MIRROR_DIR/$MIRROR_SENTINEL" ]; then
+        log "警告：$MIRROR_DIR/$MIRROR_SENTINEL 不存在——目標硬碟可能沒有掛上，略過鏡像"
+        return 1
+    fi
+
+    src_dev=$(stat -c %d "$BACKUP_DIR" 2>/dev/null || echo "?")
+    dst_dev=$(stat -c %d "$MIRROR_DIR" 2>/dev/null || echo "??")
+
+    if [ "$src_dev" = "$dst_dev" ]; then
+        log "警告：$MIRROR_DIR 與備份目錄在同一顆碟上，鏡像沒有意義，略過"
+        return 1
+    fi
+
+    return 0
+}
+
+# 只複製「目標端還沒有的檔案」。
+#
+# 備份檔一旦寫好就不會再被修改（檔名帶時間戳，每月檔也只在當月第一次
+# 建立），所以不需要 rsync 的差異比對——一個 for 迴圈就夠，而且 mariadb
+# 映像裡本來就沒有 rsync，這樣也不必為了它多裝套件。
+#
+# 刻意不刪除目標端多出來的檔案。鏡像的目的是備援，不是做出一份一模一樣
+# 的副本：來源端不管是正常輪替、還是有人誤刪整個目錄，「同步刪除」都會
+# 原封不動地照做一次，那正好把備份最該防的情境變成必然發生。代價是鏡像
+# 端會累積，要清理用 `backup.sh mirror-prune <天數>`，那是一個明確的決定。
+mirror_sync() {
+    [ -n "$MIRROR_DIR" ] || return 0
+    mirror_ready || return 1
+
+    copied=0
+
+    for path in "$BACKUP_DIR"/daily/*.sql.gz "$BACKUP_DIR"/monthly/*.sql.gz; do
+        [ -f "$path" ] || continue
+
+        rel=${path#"$BACKUP_DIR"/}
+        dest="$MIRROR_DIR/$rel"
+
+        [ -f "$dest" ] && continue
+
+        mkdir -p "$(dirname "$dest")"
+
+        # 一樣先寫暫存再改名：複製到一半斷掉的檔案不會有正式檔名，
+        # 不可能在還原時被當成可用的備份。-p 保留原本的修改時間，
+        # mirror-prune 與人工判斷「這份多舊」才會準。
+        if cp -p "$path" "$dest.tmp" && mv "$dest.tmp" "$dest"; then
+            copied=$((copied + 1))
+        else
+            rm -f "$dest.tmp"
+            log "警告：複製 $rel 到鏡像失敗"
+            return 1
+        fi
+    done
+
+    # 先刪再寫。用 `>` 直接覆蓋的話，只要這個檔案曾經被別的使用者建立過
+    # （例如手動用 sudo 跑過一次），就會 Permission denied——而 rsync／複製
+    # 本身是成功的，於是時間戳永遠停在過去，verify 一天比一天喊「鏡像過期」，
+    # 看起來壞掉其實沒壞。這種假警報比真的壞掉更麻煩，它會訓練人忽略警告。
+    rm -f "$BACKUP_DIR/.last-mirror"
+    if ! date '+%Y-%m-%d %H:%M:%S' > "$BACKUP_DIR/.last-mirror"; then
+        log "警告：檔案已複製完成，但寫不進 .last-mirror（權限？）"
+        return 1
+    fi
+
+    log "鏡像同步完成：新增 ${copied} 份 → $MIRROR_DIR"
+}
+
+# 刪除鏡像端超過 N 天的備份。刻意做成手動指令而不是自動行為，
+# 理由見 mirror_sync() 裡「不刪除」那一段。
+mirror_prune() {
+    days="${1:-}"
+    [ -n "$days" ] || { echo "用法: backup.sh mirror-prune <天數>" >&2; return 64; }
+    [ -n "$MIRROR_DIR" ] || { echo "沒有設定 BACKUP_MIRROR_PATH" >&2; return 1; }
+
+    mirror_ready || return 1
+
+    removed=$(find "$MIRROR_DIR" -name '*.sql.gz' -mtime "+$days" -print -delete | wc -l | tr -d ' ')
+    log "刪除鏡像端超過 $days 天的備份共 $removed 份"
 }
 
 # 檢查最新的備份檔是不是還在、而且夠新。這一項跟資料庫心跳互補：
@@ -233,8 +348,7 @@ verify() {
         return 1
     fi
 
-    # 異地鏡像的狀態。標記檔由主機端的 mirror-backups.sh 寫在備份目錄裡
-    # ——這個容器看得到那個目錄，所以「檢查備份」可以一次看完兩邊。
+    # 異地鏡像的狀態。時間戳寫在備份目錄裡，所以「檢查備份」一次看完兩邊。
     # 沒有設定鏡像的話不提，避免對還沒做這件事的環境變成雜訊。
     if [ -f "$BACKUP_DIR/.last-mirror" ]; then
         mirror_age=$(( ( $(date '+%s') - $(date -r "$BACKUP_DIR/.last-mirror" '+%s') ) / 3600 ))
@@ -244,6 +358,10 @@ verify() {
             echo "警告：異地鏡像已經超過 ${hours} 小時沒有更新，目標硬碟可能沒有掛上"
             return 1
         fi
+    elif [ -n "$MIRROR_DIR" ]; then
+        # 有設定卻一次都沒成功過——最需要講出來的狀況，代表從一開始就沒設對。
+        echo "警告：有設定異地鏡像，但從來沒有成功同步過（$MIRROR_DIR）"
+        return 1
     fi
 
     echo "檢查通過"
@@ -333,6 +451,15 @@ case "${1:-loop}" in
         verify "${2:-48}"
         ;;
 
+    mirror)
+        [ -n "$MIRROR_DIR" ] || { echo "沒有設定 BACKUP_MIRROR_PATH" >&2; exit 1; }
+        mirror_sync
+        ;;
+
+    mirror-prune)
+        mirror_prune "${2:-}"
+        ;;
+
     restore)
         require_env
         wait_for_db
@@ -360,6 +487,10 @@ case "${1:-loop}" in
         # 「上一次寫心跳時失敗」的狀態在重啟後自己修好，不需要人工介入。
         sync_heartbeats
 
+        # 同理補一次鏡像：上次同步失敗（碟沒掛、目錄權限）之後，重新掛好
+        # 再 restart 就會自己補齊，不必記得手動跑一次。
+        mirror_sync || true
+
         # 啟動時如果今天還沒有備份就先跑一次。這樣「剛裝好」立刻看得到
         # 結果，不必等到隔天凌晨才知道設定對不對——而設定錯了卻要等
         # 一天才發現，正是備份最容易被忽略的失敗方式。
@@ -377,7 +508,7 @@ case "${1:-loop}" in
         ;;
 
     *)
-        echo "用法: backup.sh [loop|once|list|verify [時數]|restore <檔名> --confirm]" >&2
+        echo "用法: backup.sh [loop|once|list|verify [時數]|mirror|mirror-prune <天數>|restore <檔名> --confirm]" >&2
         exit 64
         ;;
 esac

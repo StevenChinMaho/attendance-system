@@ -142,6 +142,20 @@ services:
             # 資料庫一起消失的話，這整個服務就沒有意義了——而那正是我們
             # 要防的情境之一（見 DEPLOYMENT.md 第 4 節的實際事故）。
             - '${BACKUP_PATH:?BACKUP_PATH 必須設定（主機上放備份的目錄）}:/backups'
+            # 異地鏡像的目標（第二顆實體硬碟）。
+            #
+            # 這件事本來是主機上的獨立腳本加 cron 在做，因為當時跑在 WSL 上，
+            # 目標是 `wsl --mount` 掛的碟、掛載狀態隨時會變，而 bind mount 只在
+            # 容器建立時解析一次。搬到獨立的 Ubuntu server 之後那個前提沒了
+            # （第二顆碟由 /etc/fstab 開機掛好就一直在），所以收進備份容器裡，
+            # 跟備份同一支腳本、同一個排程、同一個身分執行。
+            #
+            # 沒有設定 BACKUP_MIRROR_PATH 時退回掛 /tmp——compose 的 volume 不能
+            # 有條件地存在，掛一個一定存在又無關緊要的路徑是最省事的做法。
+            # 真正決定「要不要做鏡像」的是下面的 BACKUP_MIRROR 環境變數：
+            # `:+` 只在 BACKUP_MIRROR_PATH 有值時才會展開成 /mirror，沒設定就是
+            # 空字串，腳本整段跳過，那個 /tmp 掛載完全不會被碰到。
+            - '${BACKUP_MIRROR_PATH:-/tmp}:/mirror'
         # 讓備份檔在主機上的擁有者是部署帳號，才方便複製到異地。
         user: '${BACKUP_UID:-1000}:${BACKUP_GID:-1000}'
         environment:
@@ -156,6 +170,8 @@ services:
             BACKUP_HOUR: '${BACKUP_HOUR:-3}'
             BACKUP_KEEP_DAILY: '${BACKUP_KEEP_DAILY:-30}'
             BACKUP_KEEP_MONTHLY: '${BACKUP_KEEP_MONTHLY:-12}'
+            # 空字串＝沒有設定異地鏡像，腳本整段跳過（見上面的 volume 說明）。
+            BACKUP_MIRROR: '${BACKUP_MIRROR_PATH:+/mirror}'
         depends_on:
             mariadb:
                 condition: service_healthy
