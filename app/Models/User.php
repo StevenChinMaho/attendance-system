@@ -72,6 +72,33 @@ class User extends Authenticatable
     }
 
     /**
+     * 這個帳號的點名／處理情形範圍是不是「全校所有班級」，而不是
+     * ownSchoolClasses() 那份名單。
+     *
+     * 兩種權限都算數，而且是刻意分開的兩件事：
+     *
+     * - classes.manage：「能新增/修改任何班級」的管理層級，範圍延伸到
+     *   「能操作任何班級的點名」是一致的（歷史上這裡曾經寫死
+     *   hasRole('admin')，見下面那段）。
+     * - attendance.record.all：純粹的點名範圍權限，不附帶任何管理能力。
+     *   學務處人員要能幫任何一班補點名、但不該能改班級設定，就是給這個。
+     *
+     * **一律檢查權限，不要寫死 hasRole('admin')。** 這裡踩過一次實際的
+     * bug：一個從 /admin/roles 建出來、被賦予跟 admin 完全相同權限組合的
+     * 自訂身分，因為沒有連結任何 Teacher/Student 業務身份，
+     * ownSchoolClasses() 對它必定是空集合，於是它一個班都點不了名——
+     * 即使它「應該」擁有等同 admin 的存取範圍。
+     *
+     * 判斷寫在這裡而不是各自散在 Policy／元件裡，是因為它有四個呼叫點
+     * （SchoolClassPolicy、AttendanceRecordPolicy、AttendanceQuickLink
+     * 以及它的 Blade），四份複製品遲早會有一份忘了跟著改。
+     */
+    public function hasAllClassAccess(): bool
+    {
+        return $this->can('classes.manage') || $this->can('attendance.record.all');
+    }
+
+    /**
      * 這個帳號名下所有的班級：學生跟導師現在是同一種形狀——一個帳號
      * 只能連結一個學生身份（見 UserAccountIsUnlinked），但那個學生本身
      * 在校期間會歷經好幾個班級（`Student::schoolClasses()` 是多對多，

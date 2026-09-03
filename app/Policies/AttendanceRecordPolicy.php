@@ -15,12 +15,12 @@ use App\Models\User;
 class AttendanceRecordPolicy
 {
     /**
-     * can('classes.manage') 一律放行，理由跟 SchoolClassPolicy::
-     * recordAttendance() 完全一樣：檢查 permission 而不是寫死
-     * hasRole('admin')，這樣一個被賦予跟 admin 同等權限組合的自訂身分
-     * （見 App\Livewire\Admin\RoleManager），才不會因為沒有連結任何
-     * Teacher/Student 業務身份、ownSchoolClasses() 必定是空集合，而
-     * 完全無法管理任何班級的處理情形。
+     * 範圍是全校的帳號一律放行，判斷集中在 User::hasAllClassAccess()。
+     *
+     * attendance.record.all（「點名所有班級」）也算在內：能幫任何一班點名
+     * 卻不能在剛剛送出的那筆紀錄上寫處理情形，是說不通的。但它只放寬
+     * 「範圍」——處理情形本身仍然要有 attendance.follow_up.manage 才做得了，
+     * 那是上面第一道檢查。
      */
     public function manageFollowUp(User $user, AttendanceRecord $record): bool
     {
@@ -28,7 +28,7 @@ class AttendanceRecordPolicy
             return false;
         }
 
-        if ($user->can('classes.manage')) {
+        if ($user->hasAllClassAccess()) {
             return true;
         }
 

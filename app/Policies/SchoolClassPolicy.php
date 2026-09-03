@@ -20,15 +20,10 @@ class SchoolClassPolicy
      * 只能是「目前最新」那一筆——過去帶過的班級之後仍可能需要回頭補登
      * 或更正點名紀錄。
      *
-     * can('classes.manage') 的帳號（內建的 admin，或是 /admin/roles 建立
-     * 出來、被賦予這個權限的自訂身分）永遠放行，不受 ownSchoolClasses()
-     * 限制——這裡刻意檢查 permission 而不是寫死 hasRole('admin')：一個
-     * 自訂身分就算被賦予了跟 admin 一模一樣的權限組合，也不會連結到任何
-     * 一個 Teacher/Student 業務身份，ownSchoolClasses() 對它必定回傳空
-     * 集合，如果只認字面上的 admin 角色，這種自訂身分會完全點不了名，
-     * 即使它「應該」擁有等同 admin 的存取範圍。classes.manage 是刻意選定
-     * 的判斷依據，因為它本來就代表「能新增/修改任何班級」的管理層級，
-     * 授權範圍延伸到「能操作任何班級的點名」是一致的。
+     * 範圍是全校的帳號（classes.manage 或 attendance.record.all，判斷集中
+     * 在 User::hasAllClassAccess()）不受 ownSchoolClasses() 限制。注意這是
+     * 兩層檢查：先問「有沒有點名這種權限」，再問「範圍到哪裡」——
+     * attendance.record.all 只放寬後者，沒有 attendance.record 一樣點不了。
      */
     public function recordAttendance(User $user, SchoolClass $schoolClass): bool
     {
@@ -36,7 +31,7 @@ class SchoolClassPolicy
             return false;
         }
 
-        if ($user->can('classes.manage')) {
+        if ($user->hasAllClassAccess()) {
             return true;
         }
 

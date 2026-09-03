@@ -40,6 +40,7 @@ class RoleManager extends Component
     public const PERMISSION_LABELS = [
         'attendance.record' => '點名',
         'attendance.record.anytime' => '不限時段點名',
+        'attendance.record.all' => '點名所有班級',
         'attendance.follow_up.manage' => '處理情形管理',
         'attendance.dashboard.view' => '即時看板',
         'users.manage' => '帳號管理',

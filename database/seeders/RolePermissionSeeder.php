@@ -24,6 +24,7 @@ class RolePermissionSeeder extends Seeder
         $permissions = [
             'attendance.record',        // 送出/查看自己班級的點名（學生、導師、管理者）
             'attendance.record.anytime', // 不受 07:00～17:00 時段限制（導師、管理者）
+            'attendance.record.all',    // 點名範圍擴大到全校所有班級，不必是自己帶的班
             'attendance.follow_up.manage', // 建立/編輯「處理情形」（學生、導師、管理者）
             'attendance.dashboard.view', // 查看全校即時點名看板（導師、管理者，學生不用）
             'users.manage',             // /admin/users：建立帳號、指派角色
@@ -62,6 +63,13 @@ class RolePermissionSeeder extends Seeder
             'attendance.dashboard.view',
         ]);
 
+        // attendance.record.all 三種內建身分都沒有給：
+        //   - 學生／導師的範圍就是自己的班（見 User::ownSchoolClasses()），
+        //     給了等於取消掉整個範圍限制。
+        //   - admin 不必特別給，它下面 syncPermissions($permissions) 拿到
+        //     全部權限，而且本來就有 classes.manage。
+        // 這個權限是為了「要能幫任何一班點名，但不該能改班級設定」的身分
+        // （例如學務處人員）而存在的，那種身分請在 /admin/roles 自訂。
         $admin = Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
         $admin->syncPermissions($permissions);
     }

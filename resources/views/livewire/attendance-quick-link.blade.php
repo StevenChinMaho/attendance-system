@@ -39,13 +39,12 @@
         <a href="{{ route('attendance.show', $classes->first()) }}" class="text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
             點名
         </a>
-    @elseif (! auth()->user()->can('classes.manage'))
+    @elseif (! auth()->user()->hasAllClassAccess())
         {{-- 學生/導師即使目前選取的學年度／學期沒有帶班，也維持顯示
              這個連結，走 GoToMyClassAttendanceController 給出「可以切換
              學年度」的提示，而不是整個項目直接消失讓人以為系統壞了。
-             can('classes.manage') 的帳號（admin 或被賦予這個權限的自訂
-             身分）沒有這種「應該有一個預設班級」的期待，沒有班級可選
-             就不顯示——理由跟上面 render() 用同一個判斷依據一致。 --}}
+             範圍是全校的帳號沒有這種「應該有一個預設班級」的期待，沒有
+             班級可選就不顯示——跟上面 render() 用同一個判斷依據。 --}}
         <a href="{{ route('attendance.mine') }}" class="text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
             點名
         </a>
