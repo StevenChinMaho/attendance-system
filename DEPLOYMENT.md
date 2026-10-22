@@ -56,7 +56,7 @@
 | `web` | 自建（`target: web`）約 93MB | 無狀態 | nginx。`public/` 靜態檔烤在映像裡 |
 | `mariadb` | `mariadb:12.3` | **有狀態** | 資料在 named volume `db-data` |
 | `backup` | `mariadb:12.3`（沿用，不另外建映像） | 無狀態 | 每日 dump 到 `BACKUP_PATH` 指定的**主機**目錄 |
-| `cloudflared` | `cloudflare/cloudflared:2026.8.2` | 無狀態 | 版本刻意釘死，不用 `:latest` |
+| `cloudflared` | `cloudflare/cloudflared:latest` | 無狀態 | 用 `:latest`，但要手動 `pull` 才會換新版 |
 
 **整個系統唯一有狀態的地方是 `db-data` 這個 volume。** 其餘容器都可以隨時砍掉重建，
 這也是備份只需要顧一個對象的原因。
@@ -425,12 +425,16 @@ git pull
 # 3. 檢查有沒有新增的設定要補（見下方說明，這一步很容易被忽略）
 ./docker/production/env-check.sh
 
-# 4. 重建映像並套用
+# 4. 順便拉最新版 cloudflared（:latest 不會自己更新，見 5.2）
+attendance pull cloudflared
+
+# 5. 重建映像並套用
 attendance up -d --build
 
-# 5. 確認
+# 6. 確認
 attendance ps
 attendance logs --tail 50 app
+attendance logs --tail 20 cloudflared
 ```
 
 **第 3 步不能省。** `.env.production` 不進版本控制（裡面是機密），但
@@ -476,9 +480,20 @@ compose 只對少數用 `${VAR:?}` 寫法的變數會直接擋下來，其餘走
   `attendance up -d`。`MARIADB_AUTO_UPGRADE=1` 已經設好，跨版本升級時會自動跑
   `mariadb-upgrade`。**升級資料庫前務必先手動備份**（見第 9 節）。
 
-- **cloudflared**：版本刻意釘死在 `compose.production.yaml` 裡。要升級就改那一行的
-  版本號再 `attendance up -d`。不要改成 `:latest`——它是整個站台的對外入口，某次
-  `pull` 撈到破壞性變更就是全站無預警中斷，而且事後很難判斷是什麼變了。
+- **cloudflared**：標籤是 `:latest`，不用改任何檔案。但 `:latest` **不會自己更新**——
+  `up -d`／`up -d --build` 都沿用本機已有的那份映像，要換新版必須明確拉。
+  5.1 的功能性更新流程已經包含這一步，所以平常跟著部署就會更新；沒有程式碼要
+  更新、只想單獨換 cloudflared 時：
+
+  ```bash
+  attendance pull cloudflared
+  attendance up -d cloudflared
+  ```
+
+  它是整個站台的對外入口，`:latest` 沒有相容性承諾。萬一更新後網站連不上，先看
+  `attendance logs --tail 50 cloudflared`；要退回舊版，就暫時把 `compose.production.yaml`
+  裡的標籤改成上一個可用的版本號（例如 `cloudflare/cloudflared:2026.8.2`）再
+  `attendance up -d cloudflared`。
 
 ### 5.3 回滾
 

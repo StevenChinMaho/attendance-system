@@ -181,14 +181,14 @@ services:
             - no-new-privileges:true
 
     cloudflared:
-        # 刻意釘死版本而不是用 :latest。這是整個站台的對外入口，
-        # 某次 `docker compose pull` 撈到破壞性變更就是全站無預警中斷，
-        # 而且事後很難判斷「到底是什麼變了」。要升級是改這一行的事，
-        # 但那應該是一個你主動做的決定。
-        image: cloudflare/cloudflared:2026.8.2
+        # 用 :latest，省掉每次手動改版本號。代價是沒有相容性承諾——
+        # 萬一某版有破壞性變更，整個站台的對外入口會跟著斷。
+        # 注意 :latest 不會自己更新：`up -d` 沿用本機已有的映像，
+        # 要換新版得明確 `pull cloudflared`（見 DEPLOYMENT.md 5.2）。
+        image: cloudflare/cloudflared:latest
         restart: unless-stopped
-        # --no-autoupdate：容器裡的自動更新會繞過上面釘版本的用意，
-        # 而且更新後 cloudflared 會自我重啟，等於在無人值守時換版本。
+        # --no-autoupdate：換版本只透過 pull 映像這一條路，不讓容器裡的
+        # cloudflared 自己更新後自我重啟，等於在無人值守時換版本。
         command: tunnel --no-autoupdate run
         environment:
             TUNNEL_TOKEN: '${TUNNEL_TOKEN:?TUNNEL_TOKEN 必須設定}'

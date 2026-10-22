@@ -62,7 +62,7 @@
 - **映像是三階段建置**：`assets`（node，編 Tailwind／Vite）→ `vendor`（composer `--no-dev`）→ `runtime`。node、composer、編譯器、dev 依賴都不會出現在最終映像裡（app 約 235MB、web 約 93MB）。
 - **程式碼與 vendor 在容器裡對 PHP 是唯讀的**：複製進映像時刻意不加 `--chown`，所以檔案是 root 所有而 php-fpm 以 www-data 執行；唯二開放寫入的是 `storage/` 與 `bootstrap/cache/`。萬一應用層被找到任意寫入漏洞，攻擊者也沒辦法把 web shell 寫進 `public/` 或竄改既有 PHP 檔案取得持續性。
 - **不需要 Redis、queue worker 或 cron 容器**：session／cache／queue 全部走 `database` driver，而專案裡沒有任何 `ShouldQueue` 的 job、Mail／Notification 或排程。這是查證過的現況，不是省略——如果未來加了背景工作，正式環境不會有東西去執行它，必須同步補上對應服務（見 DEPLOYMENT.md 第 6.6 節）。
-- **`cloudflare/cloudflared` 刻意釘死版本，不用 `:latest`**：它是整個站台的對外入口，`:latest` 沒有任何相容性承諾，某次 `pull` 撈到破壞性變更就是全站無預警中斷且難以追查。其餘三個標籤（`php:8.5-fpm-alpine`／`nginx:stable-alpine`／`mariadb:12.3`）是在修補版本內滾動，拿可重現性換安全更新是划算的。
+- **`cloudflare/cloudflared` 用 `:latest`**：原本釘死版本號，但每次升級都要手動改版本號太麻煩，評估後判斷出問題的機率低，改用 `:latest`。代價是沒有相容性承諾：它是整個站台的對外入口，萬一某版有破壞性變更就是全站中斷，退路是暫時把標籤改回上一個可用的版本號。`:latest` 不會自動更新——`up -d` 沿用本機映像，只有明確 `pull cloudflared` 才會換版本。DEPLOYMENT.md 5.1 的功能性更新流程把這一步放在 `up -d --build` 之前，所以平常每次部署就順便更新，換版的時間點仍然落在有人在場的部署時。`--no-autoupdate` 保留，理由相同：不讓容器在無人值守時自己換版本。其餘三個標籤（`php:8.5-fpm-alpine`／`nginx:stable-alpine`／`mariadb:12.3`）是在修補版本內滾動，拿可重現性換安全更新是划算的。
 - **`compose.production.yaml` 的 `name:` 不能拿掉**：compose 預設拿目錄名稱當專案名，而 Sail 的 `compose.yaml` 沒有指定 name，兩邊都會是 `attendance-system`。實測結果是在開發機上跑正式 compose 時，它會認定 Sail 的 mariadb 容器就是「這個專案的 mariadb」而直接用正式環境的設定重建掉，開發環境當場壞掉。
 
 ## 為了上線而修掉的兩個實際缺陷
